@@ -28,18 +28,26 @@ export interface AuthResponse {
   user: User;
 }
 
+// Configuración base de la API
+const API_BASE_URL = config.api.baseUrl;
+
 // Clase principal de la API
 class ApiService {
   private api: AxiosInstance;
   private token: string | null = null;
 
   constructor() {
+    // Usar proxy en producción para evitar CORS (igual que logoAI)
+    // En desarrollo, el proxy de Vite redirige /api/proxy/* a la API real
+    const baseURL = config.api.useProxy 
+      ? config.api.proxyUrl 
+      : API_BASE_URL;
+      
     this.api = axios.create({
-      baseURL: config.api.baseUrl,
+      baseURL,
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: config.api.timeout,
     });
 
     // Interceptor para agregar token a todas las peticiones

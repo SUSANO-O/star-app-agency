@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../lib/useAuth';
 import AuthGuard from '../components/AuthGuard';
-import { Rocket } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -14,52 +14,42 @@ export default function RegisterPage() {
     password: '',
     password2: '',
   });
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword2, setShowPassword2] = useState(false);
   
-  const { register, isAuthenticated, isLoading, error, clearError } = useAuth();
+  const { register, isLoading, error, clearError } = useAuth();
   const navigate = useNavigate();
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.email) {
-      newErrors.email = 'El email es requerido';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'El email no es válido';
-    }
-
-    if (!formData.username) {
-      newErrors.username = 'El nombre de usuario es requerido';
-    } else if (formData.username.length < 3) {
-      newErrors.username = 'El nombre de usuario debe tener al menos 3 caracteres';
-    }
-
-    if (!formData.password) {
-      newErrors.password = 'La contraseña es requerida';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'La contraseña debe tener al menos 6 caracteres';
-    }
-
-    if (!formData.password2) {
-      newErrors.password2 = 'Confirma tu contraseña';
-    } else if (formData.password !== formData.password2) {
-      newErrors.password2 = 'Las contraseñas no coinciden';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  // Validaciones en tiempo real
+  const isValidEmail = formData.email.includes('@') && formData.email.includes('.') && formData.email.length > 5;
+  const hasMinLength = formData.password.length >= 8;
+  const hasLettersAndNumbers = /[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password);
+  const hasSpecialChars = /[/*\-+]/.test(formData.password);
+  const isValidPassword = hasMinLength && hasLettersAndNumbers && hasSpecialChars;
+  const passwordsMatch = formData.password === formData.password2 && formData.password2.length > 0;
+  const isValidUsername = formData.username.length >= 3;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
     
-    if (!validateForm()) {
+    // Validación final antes de enviar
+    if (!isValidEmail) {
+      return;
+    }
+    if (!isValidUsername) {
+      return;
+    }
+    if (!isValidPassword) {
+      return;
+    }
+    if (!passwordsMatch) {
       return;
     }
 
     try {
       await register(formData);
+      // Redirigir al login después del registro exitoso
       navigate('/login');
     } catch (error) {
       console.error('Registration error:', error);
@@ -69,25 +59,14 @@ export default function RegisterPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Clear error for this field when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
   };
 
   return (
     <AuthGuard requireAuth={false} redirectTo="/">
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-white">
-        <Card className="w-full max-w-md p-8 bg-white border-slate-200 shadow-xl">
+      <div className="flex min-h-screen items-center justify-center bg-white py-12">
+        <Card className="w-full max-w-md p-8 bg-white border-slate-200 shadow-xl rounded-2xl">
           <div className="text-center mb-8">
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-gradient-to-tr from-[#FF007A] via-[#FF5C00] to-[#FFD600] rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-                <Rocket className="text-white" size={32} />
-              </div>
-            </div>
-            <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter">Crear Cuenta</h1>
-            <p className="text-slate-500 text-sm font-semibold">Únete a Agency 360</p>
+            <h1 className="text-3xl font-bold text-slate-900 mb-6">Register</h1>
           </div>
           
           {error && (
@@ -97,9 +76,9 @@ export default function RegisterPage() {
           )}
           
           <form onSubmit={handleSubmit}>
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
                   Email
                 </label>
                 <Input
@@ -107,102 +86,148 @@ export default function RegisterPage() {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  placeholder="tu@email.com"
-                  className={`w-full bg-slate-50 border-slate-200 text-slate-900 ${
-                    errors.email ? 'border-red-500' : ''
+                  placeholder="email@example.com"
+                  className={`w-full bg-white border-slate-300 text-slate-900 ${
+                    formData.email && !isValidEmail ? 'border-red-500' : formData.email && isValidEmail ? 'border-green-500' : ''
                   }`}
                   required
                   disabled={isLoading}
                 />
-                {errors.email && (
-                  <p className="text-red-500 text-xs mt-1 font-semibold">{errors.email}</p>
+                {formData.email && !isValidEmail && (
+                  <p className="mt-1 text-sm text-red-500 font-medium">Please enter a valid email</p>
+                )}
+                {formData.email && isValidEmail && (
+                  <p className="mt-1 text-sm text-green-600 font-medium">Valid email</p>
                 )}
               </div>
               
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Nombre de Usuario
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Username
                 </label>
                 <Input
                   type="text"
                   name="username"
                   value={formData.username}
                   onChange={handleInputChange}
-                  placeholder="Nombre de usuario"
-                  className={`w-full bg-slate-50 border-slate-200 text-slate-900 ${
-                    errors.username ? 'border-red-500' : ''
+                  placeholder="Username"
+                  className={`w-full bg-white border-slate-300 text-slate-900 ${
+                    formData.username && !isValidUsername ? 'border-red-500' : formData.username && isValidUsername ? 'border-green-500' : ''
                   }`}
                   required
                   disabled={isLoading}
                 />
-                {errors.username && (
-                  <p className="text-red-500 text-xs mt-1 font-semibold">{errors.username}</p>
+                {formData.username && !isValidUsername && (
+                  <p className="mt-1 text-sm text-red-500 font-medium">Username must be at least 3 characters</p>
+                )}
+                {formData.username && isValidUsername && (
+                  <p className="mt-1 text-sm text-green-600 font-medium">Valid username</p>
                 )}
               </div>
               
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Contraseña
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Password
                 </label>
-                <Input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  placeholder="Contraseña"
-                  className={`w-full bg-slate-50 border-slate-200 text-slate-900 ${
-                    errors.password ? 'border-red-500' : ''
-                  }`}
-                  required
-                  disabled={isLoading}
-                />
-                {errors.password && (
-                  <p className="text-red-500 text-xs mt-1 font-semibold">{errors.password}</p>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    placeholder="Password"
+                    className={`w-full bg-white border-slate-300 text-slate-900 pr-10 ${
+                      formData.password && !isValidPassword ? 'border-red-500' : formData.password && isValidPassword ? 'border-green-500' : ''
+                    }`}
+                    required
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+                {formData.password && (
+                  <div className="mt-2 space-y-1">
+                    <p className={`text-sm ${hasMinLength ? 'text-green-600' : 'text-red-500'} font-medium`}>
+                      8-character password
+                    </p>
+                    <p className={`text-sm ${hasLettersAndNumbers ? 'text-green-600' : 'text-red-500'} font-medium`}>
+                      Include letters and numbers
+                    </p>
+                    <p className={`text-sm ${hasSpecialChars ? 'text-green-600' : 'text-red-500'} font-medium`}>
+                      Special characters /*-+
+                    </p>
+                  </div>
                 )}
               </div>
               
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Confirmar Contraseña
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Confirm Password
                 </label>
-                <Input
-                  type="password"
-                  name="password2"
-                  value={formData.password2}
-                  onChange={handleInputChange}
-                  placeholder="Confirma tu contraseña"
-                  className={`w-full bg-slate-50 border-slate-200 text-slate-900 ${
-                    errors.password2 ? 'border-red-500' : ''
-                  }`}
-                  required
-                  disabled={isLoading}
-                />
-                {errors.password2 && (
-                  <p className="text-red-500 text-xs mt-1 font-semibold">{errors.password2}</p>
+                <div className="relative">
+                  <Input
+                    type={showPassword2 ? 'text' : 'password'}
+                    name="password2"
+                    value={formData.password2}
+                    onChange={handleInputChange}
+                    placeholder="Confirm Password"
+                    className={`w-full bg-white border-slate-300 text-slate-900 pr-10 ${
+                      formData.password2 && !passwordsMatch ? 'border-red-500' : formData.password2 && passwordsMatch ? 'border-green-500' : ''
+                    }`}
+                    required
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword2(!showPassword2)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword2 ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+                {formData.password2 && (
+                  <div className="mt-2 space-y-1">
+                    <p className={`text-sm ${hasMinLength ? 'text-green-600' : 'text-red-500'} font-medium`}>
+                      8-character password
+                    </p>
+                    <p className={`text-sm ${hasLettersAndNumbers ? 'text-green-600' : 'text-red-500'} font-medium`}>
+                      Include letters and numbers
+                    </p>
+                    <p className={`text-sm ${hasSpecialChars ? 'text-green-600' : 'text-red-500'} font-medium`}>
+                      Special characters /*-+
+                    </p>
+                    {!passwordsMatch && formData.password2.length > 0 && (
+                      <p className="text-sm text-red-500 font-medium">Passwords do not match</p>
+                    )}
+                    {passwordsMatch && (
+                      <p className="text-sm text-green-600 font-medium">Passwords match</p>
+                    )}
+                  </div>
                 )}
               </div>
               
               <Button 
                 type="submit" 
-                className="w-full bg-slate-900 hover:bg-fuchsia-600 text-white font-black text-base py-3 rounded-xl transition-all"
-                disabled={isLoading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-base py-3 rounded-lg transition-all"
+                disabled={isLoading || !isValidEmail || !isValidUsername || !isValidPassword || !passwordsMatch}
               >
-                {isLoading ? 'Creando cuenta...' : 'Registrarse'}
+                {isLoading ? 'Registering...' : 'Register'}
               </Button>
             </div>
           </form>
           
-          <div className="mt-8 space-y-4">
-            <div className="text-center text-sm text-slate-500 font-semibold">
-              <p>¿Ya tienes cuenta?</p>
-            </div>
-            <Link to="/login">
-              <Button 
-                variant="outline" 
-                className="w-full border-fuchsia-500 text-fuchsia-600 hover:bg-fuchsia-50 font-bold"
-              >
-                Iniciar sesión
-              </Button>
+          <div className="mt-6 flex justify-center gap-4 text-sm">
+            <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
+              Register
+            </Link>
+            <span className="text-slate-300">|</span>
+            <Link to="/forgot-password" className="text-blue-600 hover:text-blue-700 font-medium">
+              Change Password
             </Link>
           </div>
         </Card>
@@ -210,4 +235,3 @@ export default function RegisterPage() {
     </AuthGuard>
   );
 }
-

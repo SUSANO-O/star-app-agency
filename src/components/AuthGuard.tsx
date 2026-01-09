@@ -17,10 +17,14 @@ export default function AuthGuard({
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log(`🔍 AuthGuard: isLoading=${isLoading}, isAuthenticated=${isAuthenticated}, requireAuth=${requireAuth}`);
+    
     if (!isLoading) {
       if (requireAuth && !isAuthenticated) {
+        console.log(`🚫 Acceso denegado, redirigiendo a ${redirectTo}`);
         navigate(redirectTo, { replace: true });
       } else if (!requireAuth && isAuthenticated) {
+        console.log(`✅ Usuario autenticado, redirigiendo a /`);
         navigate('/', { replace: true });
       }
     }

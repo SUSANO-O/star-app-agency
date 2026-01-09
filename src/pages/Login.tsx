@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
@@ -11,17 +11,18 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, isLoading, error, clearError } = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
     
     try {
+      console.log('🚀 Enviando credenciales de login...');
       await login({ email, password });
-      navigate('/');
+      console.log('✅ Login completado exitosamente');
+      // La redirección se maneja automáticamente con AuthGuard
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error:', error);
     }
   };
 

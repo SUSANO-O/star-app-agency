@@ -61,13 +61,18 @@ export const useAuth = () => {
     checkAuth();
   }, []);
 
-  // Login
+  // Login - LÓGICA SIMPLE Y CORRECTA
   const login = useCallback(async (credentials: LoginCredentials) => {
+    console.log('🔐 useAuth: Iniciando proceso de login...', credentials);
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     
     try {
+      console.log('🔐 useAuth: Llamando a apiService.login...');
       const response = await apiService.login(credentials);
+      console.log('✅ useAuth: Login exitoso, respuesta:', response);
       
+      // IMPORTANTE: Actualizar el estado ANTES de la redirección
+      console.log('🔄 useAuth: Actualizando estado...');
       setState({
         user: response.user || null,
         isAuthenticated: true,
@@ -75,8 +80,13 @@ export const useAuth = () => {
         error: null,
       });
       
+      console.log('✅ useAuth: Estado actualizado correctamente');
+      
+      // La redirección se maneja con AuthGuard
+      
       return response;
     } catch (error: unknown) {
+      console.error('❌ useAuth: Error en login:', error);
       const errorMessage = error && typeof error === 'object' && 'message' in error 
         ? (error as { message: string }).message 
         : 'Error en el login';
