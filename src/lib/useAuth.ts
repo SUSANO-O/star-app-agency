@@ -1,0 +1,139 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { apiService, User, LoginCredentials, RegisterData } from './api';
+
+export interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+}
+
+export const useAuth = () => {
+  const [state, setState] = useState<AuthState>({
+    user: null,
+    isAuthenticated: false,
+    isLoading: true,
+    error: null,
+  });
+
+  const navigate = useNavigate();
+
+  // Verificar autenticación al cargar
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = apiService.getToken();
+        
+        if (token) {
+          // Verificar si el token es válido obteniendo el perfil
+          try {
+            const profile = await apiService.getProfile();
+            setState({
+              user: profile,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+          } catch (error) {
+            // Token inválido, limpiar
+            apiService.clearToken();
+            setState({
+              user: null,
+              isAuthenticated: false,
+              isLoading: false,
+              error: null,
+            });
+          }
+        } else {
+          setState(prev => ({ ...prev, isLoading: false }));
+        }
+      } catch (error) {
+        setState({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: 'Error al verificar autenticación',
+        });
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  // Login
+  const login = useCallback(async (credentials: LoginCredentials) => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    try {
+      const response = await apiService.login(credentials);
+      
+      setState({
+        user: response.user || null,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      });
+      
+      return response;
+    } catch (error: unknown) {
+      const errorMessage = error && typeof error === 'object' && 'message' in error 
+        ? (error as { message: string }).message 
+        : 'Error en el login';
+      setState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      throw error;
+    }
+  }, []);
+
+  // Registro
+  const register = useCallback(async (data: RegisterData) => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    try {
+      const user = await apiService.register(data);
+      setState(prev => ({ ...prev, isLoading: false, error: null }));
+      return user;
+    } catch (error: unknown) {
+      const errorMessage = error && typeof error === 'object' && 'message' in error 
+        ? (error as { message: string }).message 
+        : 'Error en el registro';
+      setState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      throw error;
+    }
+  }, []);
+
+  // Logout
+  const logout = useCallback(() => {
+    apiService.logout();
+    setState({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: null,
+    });
+    navigate('/login');
+  }, [navigate]);
+
+  // Limpiar error
+  const clearError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null }));
+  }, []);
+
+  // Actualizar usuario
+  const updateUser = useCallback((userData: Partial<User>) => {
+    setState(prev => ({
+      ...prev,
+      user: prev.user ? { ...prev.user, ...userData } : null,
+    }));
+  }, []);
+
+  return {
+    ...state,
+    login,
+    register,
+    logout,
+    clearError,
+    updateUser,
+  };
+};
+
