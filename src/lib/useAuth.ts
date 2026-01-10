@@ -23,28 +23,17 @@ export const useAuth = () => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const token = apiService.getToken();
-        
-        if (token) {
-          // Verificar si el token es válido obteniendo el perfil
-          try {
-            const profile = await apiService.getProfile();
-            setState({
-              user: profile,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
-            });
-          } catch (error) {
-            // Token inválido, limpiar
-            apiService.clearToken();
-            setState({
-              user: null,
-              isAuthenticated: false,
-              isLoading: false,
-              error: null,
-            });
-          }
+        const credentials = apiService.getCredentials();
+
+        if (credentials.username && credentials.password) {
+          // Si hay credenciales, obtener el usuario
+          const userFromCredentials = apiService.getUserFromCredentials();
+          setState({
+            user: userFromCredentials,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
         } else {
           setState(prev => ({ ...prev, isLoading: false }));
         }
@@ -65,12 +54,12 @@ export const useAuth = () => {
   const login = useCallback(async (credentials: LoginCredentials) => {
     console.log('🔐 useAuth: Iniciando proceso de login...', credentials);
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+
     try {
       console.log('🔐 useAuth: Llamando a apiService.login...');
       const response = await apiService.login(credentials);
       console.log('✅ useAuth: Login exitoso, respuesta:', response);
-      
+
       // IMPORTANTE: Actualizar el estado ANTES de la redirección
       console.log('🔄 useAuth: Actualizando estado...');
       setState({
@@ -79,21 +68,22 @@ export const useAuth = () => {
         isLoading: false,
         error: null,
       });
-      
+
       console.log('✅ useAuth: Estado actualizado correctamente');
-      
-      // La redirección se maneja con AuthGuard
-      
+
+      // Redirigir a la página principal después del login exitoso
+      navigate('/');
+
       return response;
     } catch (error: unknown) {
       console.error('❌ useAuth: Error en login:', error);
-      const errorMessage = error && typeof error === 'object' && 'message' in error 
-        ? (error as { message: string }).message 
+      const errorMessage = error && typeof error === 'object' && 'message' in error
+        ? (error as { message: string }).message
         : 'Error en el login';
       setState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
       throw error;
     }
-  }, []);
+  }, [navigate]);
 
   // Registro
   const register = useCallback(async (data: RegisterData) => {

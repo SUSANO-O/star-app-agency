@@ -14,6 +14,8 @@ export const config = {
   // Authentication
   auth: {
     tokenKey: import.meta.env.VITE_JWT_STORAGE_KEY || 'auth_token',
+    usernameKey: import.meta.env.VITE_USERNAME_STORAGE_KEY || 'auth_username',
+    passwordKey: import.meta.env.VITE_PASSWORD_STORAGE_KEY || 'auth_password',
     tokenExpiry: 24 * 60 * 60 * 1000, // 24 horas en milisegundos
   },
   

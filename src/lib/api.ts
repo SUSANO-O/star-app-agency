@@ -34,15 +34,16 @@ const API_BASE_URL = config.api.baseUrl;
 // Clase principal de la API
 class ApiService {
   private api: AxiosInstance;
-  private token: string | null = null;
+  private username: string | null = null;
+  private password: string | null = null;
 
   constructor() {
     // Usar proxy en producción para evitar CORS (igual que logoAI)
     // En desarrollo, el proxy de Vite redirige /api/proxy/* a la API real
-    const baseURL = config.api.useProxy 
-      ? config.api.proxyUrl 
+    const baseURL = config.api.useProxy
+      ? config.api.proxyUrl
       : API_BASE_URL;
-      
+
     this.api = axios.create({
       baseURL,
       headers: {
@@ -50,11 +51,12 @@ class ApiService {
       },
     });
 
-    // Interceptor para agregar token a todas las peticiones
+    // Interceptor para agregar Basic Auth a todas las peticiones
     this.api.interceptors.request.use(
       (config) => {
-        if (this.token) {
-          config.headers.Authorization = `Bearer ${this.token}`;
+        if (this.username && this.password) {
+          const token = btoa(`${this.username}:${this.password}`);
+          config.headers.Authorization = `Basic ${token}`;
         }
         return config;
       },
@@ -68,8 +70,8 @@ class ApiService {
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          this.clearToken();
-          // Redirigir al login si el token expiró
+          this.clearCredentials();
+          // Redirigir al login si las credenciales son inválidas
           if (typeof window !== 'undefined') {
             window.location.href = '/login';
           }
@@ -78,51 +80,90 @@ class ApiService {
       }
     );
 
-    // Cargar token del localStorage si existe
-    this.loadToken();
+    // Cargar credenciales del localStorage si existen
+    this.loadCredentials();
   }
 
-  // Métodos para manejar el token
-  private loadToken(): void {
+  // Métodos para manejar las credenciales
+  private loadCredentials(): void {
     if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem(config.auth.tokenKey);
+      this.username = localStorage.getItem(config.auth.usernameKey);
+      this.password = localStorage.getItem(config.auth.passwordKey);
     }
   }
 
-  public setToken(token: string): void {
-    this.token = token;
+  public setCredentials(username: string, password: string): void {
+    console.log('🔐 apiService: Guardando credenciales en localStorage');
+    this.username = username;
+    this.password = password;
     if (typeof window !== 'undefined') {
-      localStorage.setItem(config.auth.tokenKey, token);
+      localStorage.setItem(config.auth.usernameKey, username);
+      localStorage.setItem(config.auth.passwordKey, password);
     }
   }
 
-  public clearToken(): void {
-    this.token = null;
+  public clearCredentials(): void {
+    this.username = null;
+    this.password = null;
     if (typeof window !== 'undefined') {
+      localStorage.removeItem(config.auth.usernameKey);
+      localStorage.removeItem(config.auth.passwordKey);
       localStorage.removeItem(config.auth.tokenKey);
     }
   }
 
-  public getToken(): string | null {
-    return this.token;
+  public getCredentials(): { username: string | null; password: string | null } {
+    return { username: this.username, password: this.password };
   }
 
   public isAuthenticated(): boolean {
-    return !!this.token;
+    return !!(this.username && this.password);
+  }
+
+  public getUserFromCredentials(): User | null {
+    if (this.username) {
+      return {
+        id: '1',
+        email: this.username,
+        username: this.username,
+      };
+    }
+    return null;
   }
 
   // ENDPOINTS DE AUTENTICACIÓN
 
   /**
-   * Login de usuario
+   * Login de usuario con Basic Auth
    */
   public async login(credentials: LoginCredentials): Promise<AuthResponse> {
+    console.log('🔐 apiService: Intentando login con Basic Auth...');
+
+    // Guardar credenciales
+    this.setCredentials(credentials.email, credentials.password);
+
+    // Validar credenciales haciendo una petición de prueba
     try {
-      const response: AxiosResponse<AuthResponse> = await this.api.post('/token/', credentials);
-      this.setToken(response.data.access);
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error, 'Error en el login');
+      console.log('🔐 apiService: Validando credenciales...');
+      await this.api.get('?path=user/');
+      console.log('✅ apiService: Login exitoso, credenciales válidas');
+
+      // Retornar respuesta compatible con la interfaz
+      const mockResponse: AuthResponse = {
+        access: 'basic-auth-session',
+        refresh: 'basic-auth-session',
+        user: this.getUserFromCredentials() || {
+          id: '1',
+          email: credentials.email,
+          username: credentials.email,
+        },
+      };
+
+      return mockResponse;
+    } catch (authError) {
+      console.error('❌ apiService: Credenciales inválidas:', authError);
+      this.clearCredentials();
+      throw this.handleError(authError, 'Credenciales inválidas');
     }
   }
 
@@ -191,7 +232,7 @@ class ApiService {
 
   // Método para logout
   public logout(): void {
-    this.clearToken();
+    this.clearCredentials();
   }
 }
 
