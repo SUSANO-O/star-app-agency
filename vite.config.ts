@@ -4,9 +4,20 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
+    },
+  },
   server: {
     proxy: {
-      // Proxy para /api/proxy/* - igual que logoAI
+      // Proxy para /api/proxy/* - solo para desarrollo local
       // Las peticiones a /api/proxy/token/ se redirigen a https://startapp360.com/api/v1/token/
       // Las peticiones a /api/proxy/register/ se redirigen a https://startapp360.com/api/v1/register/
       '/api/proxy': {
