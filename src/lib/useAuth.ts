@@ -19,36 +19,34 @@ export const useAuth = () => {
 
   const navigate = useNavigate();
 
-  // Verificar autenticación al cargar
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const credentials = apiService.getCredentials();
-
-        if (credentials.username && credentials.password) {
-          // Si hay credenciales, obtener el usuario
-          const userFromCredentials = apiService.getUserFromCredentials();
-          setState({
-            user: userFromCredentials,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-          });
-        } else {
-          setState(prev => ({ ...prev, isLoading: false }));
-        }
-      } catch (error) {
-        setState({
-          user: null,
-          isAuthenticated: false,
-          isLoading: false,
-          error: 'Error al verificar autenticación',
-        });
+  const checkAuth = useCallback(() => {
+    try {
+      if (!apiService.isAuthenticated()) {
+        setState(prev => ({ ...prev, user: null, isAuthenticated: false, isLoading: false }));
+        return;
       }
-    };
-
-    checkAuth();
+      const userFromCredentials = apiService.getUserFromCredentials();
+      setState({
+        user: userFromCredentials,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error) {
+      setState({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: 'Error al verificar autenticación',
+      });
+    }
   }, []);
+
+  useEffect(() => {
+    checkAuth();
+    window.addEventListener('auth-changed', checkAuth);
+    return () => window.removeEventListener('auth-changed', checkAuth);
+  }, [checkAuth]);
 
   // Login - LÓGICA SIMPLE Y CORRECTA
   const login = useCallback(async (credentials: LoginCredentials) => {

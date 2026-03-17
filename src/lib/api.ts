@@ -36,10 +36,9 @@ class ApiService {
   private api: AxiosInstance;
   private username: string | null = null;
   private password: string | null = null;
+  private authToken: string | null = null;
 
   constructor() {
-    // Usar proxy en producción para evitar CORS (igual que logoAI)
-    // En desarrollo, el proxy de Vite redirige /api/proxy/* a la API real
     const baseURL = config.api.useProxy
       ? config.api.proxyUrl
       : API_BASE_URL;
@@ -51,10 +50,13 @@ class ApiService {
       },
     });
 
-    // Interceptor para agregar Basic Auth a todas las peticiones
+    // Interceptor: Bearer (JWT) o Basic Auth
     this.api.interceptors.request.use(
       (config) => {
-        if (this.username && this.password) {
+        this.loadCredentials();
+        if (this.authToken) {
+          config.headers.Authorization = `Bearer ${this.authToken}`;
+        } else if (this.username && this.password) {
           const token = btoa(`${this.username}:${this.password}`);
           config.headers.Authorization = `Basic ${token}`;
         }
@@ -84,31 +86,46 @@ class ApiService {
     this.loadCredentials();
   }
 
-  // Métodos para manejar las credenciales
   private loadCredentials(): void {
     if (typeof window !== 'undefined') {
       this.username = localStorage.getItem(config.auth.usernameKey);
       this.password = localStorage.getItem(config.auth.passwordKey);
+      this.authToken = localStorage.getItem(config.auth.tokenKey);
     }
   }
 
+  public setToken(access: string, email: string, user?: User): void {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(config.auth.tokenKey, access);
+      localStorage.setItem(config.auth.usernameKey, email);
+      localStorage.removeItem(config.auth.passwordKey);
+      if (user) localStorage.setItem('userData', JSON.stringify(user));
+    }
+    this.authToken = access;
+    this.username = email;
+    this.password = null;
+  }
+
   public setCredentials(username: string, password: string): void {
-    console.log('🔐 apiService: Guardando credenciales en localStorage');
     this.username = username;
     this.password = password;
+    this.authToken = null;
     if (typeof window !== 'undefined') {
       localStorage.setItem(config.auth.usernameKey, username);
       localStorage.setItem(config.auth.passwordKey, password);
+      localStorage.removeItem(config.auth.tokenKey);
     }
   }
 
   public clearCredentials(): void {
     this.username = null;
     this.password = null;
+    this.authToken = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem(config.auth.usernameKey);
       localStorage.removeItem(config.auth.passwordKey);
       localStorage.removeItem(config.auth.tokenKey);
+      localStorage.removeItem('userData');
     }
   }
 
@@ -117,16 +134,21 @@ class ApiService {
   }
 
   public isAuthenticated(): boolean {
-    return !!(this.username && this.password);
+    this.loadCredentials();
+    return !!(this.authToken || (this.username && this.password));
   }
 
   public getUserFromCredentials(): User | null {
+    this.loadCredentials();
+    const userData = typeof window !== 'undefined' ? localStorage.getItem('userData') : null;
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        return { id: parsed.id || '1', email: parsed.email, username: parsed.username || parsed.email };
+      } catch {}
+    }
     if (this.username) {
-      return {
-        id: '1',
-        email: this.username,
-        username: this.username,
-      };
+      return { id: '1', email: this.username, username: this.username };
     }
     return null;
   }
@@ -134,46 +156,58 @@ class ApiService {
   // ENDPOINTS DE AUTENTICACIÓN
 
   /**
-   * Login de usuario con Basic Auth
+   * Login de usuario - usa microservicio login-360 cuando está configurado
    */
   public async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    console.log('🔐 apiService: Intentando login con Basic Auth...');
-
-    // Guardar credenciales
-    this.setCredentials(credentials.email, credentials.password);
-
-    // Validar credenciales haciendo una petición de prueba
+    const login360Url = import.meta.env?.VITE_LOGIN_360_URL || 'http://localhost:3006';
     try {
-      console.log('🔐 apiService: Validando credenciales...');
-      await this.api.get('?path=user/');
-      console.log('✅ apiService: Login exitoso, credenciales válidas');
+      console.log('🔐 apiService: Intentando login vía login-360...');
+      const res = await fetch(`${login360Url}/api/v1/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      });
+      const data = await res.json();
 
-      // Retornar respuesta compatible con la interfaz
-      const mockResponse: AuthResponse = {
-        access: 'basic-auth-session',
-        refresh: 'basic-auth-session',
-        user: this.getUserFromCredentials() || {
-          id: '1',
-          email: credentials.email,
-          username: credentials.email,
-        },
-      };
+      if (data.success && data.access) {
+        this.setCredentials(credentials.email, credentials.password);
+        console.log('✅ apiService: Login exitoso vía login-360');
+        return {
+          access: data.access,
+          refresh: data.refresh || 'basic-auth-session',
+          user: data.user || this.getUserFromCredentials() || {
+            id: '1',
+            email: credentials.email,
+            username: credentials.email,
+          },
+        };
+      }
 
-      return mockResponse;
+      this.clearCredentials();
+      throw this.handleError({ message: data.error }, 'Credenciales inválidas');
     } catch (authError) {
-      console.error('❌ apiService: Credenciales inválidas:', authError);
+      console.error('❌ apiService: Error en login:', authError);
       this.clearCredentials();
       throw this.handleError(authError, 'Credenciales inválidas');
     }
   }
 
   /**
-   * Registro de usuario
+   * Registro de usuario - usa microservicio login-360 cuando está configurado
    */
   public async register(data: RegisterData): Promise<User> {
+    const login360Url = import.meta.env?.VITE_LOGIN_360_URL || 'http://localhost:3006';
     try {
-      const response: AxiosResponse<User> = await this.api.post('/register/', data);
-      return response.data;
+      const res = await fetch(`${login360Url}/api/v1/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
+      if (result.success) {
+        return { id: '1', email: data.email, username: data.username };
+      }
+      throw new Error(result.error || 'Error en el registro');
     } catch (error) {
       throw this.handleError(error, 'Error en el registro');
     }

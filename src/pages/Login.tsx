@@ -1,18 +1,34 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/useAuth';
 import AuthGuard from '../components/AuthGuard';
+import { useFormPersist, useFormSubmit, useDebounce } from '../lib/hooks';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const emailInputRef = useRef<HTMLInputElement>(null);
+
+  const { formData, updateField, resetForm } = useFormPersist('login', {
+    email: '',
+    remember: false,
+  });
+
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading, error, clearError } = useAuth();
+  const { isSubmitting, handleSubmit } = useFormSubmit();
 
-  // Validación de email
-  const isValidEmail = (email: string) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
+  const email = formData.email as string;
+  const debouncedEmail = useDebounce(email, 300);
+
+  useEffect(() => {
+    emailInputRef.current?.focus();
+  }, []);
+
+  // Validación de email (usar el valor actual para submit, debounced para feedback)
+  const emailIsValidDebounced = debouncedEmail.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(debouncedEmail);
+  const emailIsValidCurrent = email.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const emailShowError = debouncedEmail.length > 0 && !emailIsValidDebounced;
+  const emailShowSuccess = emailIsValidDebounced;
 
   // Validación de password
   const passwordValidations = {
@@ -21,17 +37,21 @@ export default function LoginPage() {
     specialChars: /[/*\-+]/.test(password),
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Para submit, usar validaciones simples sin debounce
+  const isFormValid = emailIsValidCurrent && password.length > 0;
+
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
 
-    try {
+    await handleSubmit(async () => {
       console.log('🚀 Enviando credenciales de login...');
       await login({ email, password });
       console.log('✅ Login completado exitosamente');
-    } catch (error) {
-      console.error('❌ Login error:', error);
-    }
+      if (!(formData.remember as boolean)) {
+        resetForm();
+      }
+    });
   };
 
   return (
@@ -42,27 +62,31 @@ export default function LoginPage() {
             <h1 className="text-2xl font-semibold text-[#333] mb-8">Sign In</h1>
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm animate-in fade-in slide-in-from-top-2 duration-300">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={onSubmit} className="space-y-4">
               {/* Email Input */}
               <div className="relative w-full">
                 <input
+                  ref={emailInputRef}
                   placeholder="email@example.com"
-                  className="w-full px-4 py-3.5 border border-[#e1e5e9] rounded-lg text-base bg-[#f8f9fa] text-[#333] placeholder-[#6c757d] focus:outline-none focus:border-[#2176ff] focus:bg-white focus:shadow-[0_0_0_3px_rgba(33,118,255,0.1)] transition-all duration-300 box-border"
+                  className={`w-full px-4 py-3.5 border rounded-lg text-base bg-[#f8f9fa] text-[#333] placeholder-[#6c757d] focus:outline-none focus:border-[#2176ff] focus:bg-white focus:shadow-[0_0_0_3px_rgba(33,118,255,0.1)] transition-all duration-300 box-border ${
+                    emailShowError ? 'border-red-400 bg-red-50' : emailShowSuccess ? 'border-green-400 bg-green-50' : 'border-[#e1e5e9]'
+                  }`}
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
+                  onChange={(e) => updateField('email', e.target.value)}
+                  disabled={isLoading || isSubmitting}
                   required
+                  autoComplete="email"
                 />
-                <p className={`text-sm mt-1 text-left min-h-[1.2rem] whitespace-pre-line transition-colors duration-300 ${
-                  email && isValidEmail(email) ? 'text-[#28a745]' : 'text-transparent'
+                <p className={`text-sm mt-1 text-left min-h-[1.2rem] whitespace-pre-line transition-all duration-300 ${
+                  emailShowSuccess ? 'text-[#28a745] animate-in fade-in slide-in-from-left-1' : emailShowError ? 'text-red-500 animate-in fade-in slide-in-from-left-1' : 'text-transparent'
                 }`}>
-                  {email && isValidEmail(email) ? 'Valid email' : ''}
+                  {emailShowSuccess ? 'Valid email ✓' : emailShowError ? 'Invalid email format' : ''}
                 </p>
               </div>
 
@@ -75,13 +99,15 @@ export default function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || isSubmitting}
                     required
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6c757d] hover:text-[#2176ff] transition-colors duration-300 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6c757d] hover:text-[#2176ff] transition-colors duration-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#2176ff] focus:ring-offset-1 rounded"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,13 +138,35 @@ export default function LoginPage() {
                 )}
               </div>
 
+              {/* Remember Me */}
+              <div className="flex items-center justify-between text-sm">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={formData.remember as boolean}
+                    onChange={(e) => updateField('remember', e.target.checked)}
+                    className="w-4 h-4 rounded border-[#e1e5e9] text-[#2176ff] focus:ring-2 focus:ring-[#2176ff] focus:ring-offset-2 cursor-pointer"
+                  />
+                  <span className="text-[#6c757d] group-hover:text-[#333] transition-colors">Remember me</span>
+                </label>
+              </div>
+
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full bg-[#2176ff] hover:bg-[#1a5bb8] text-white font-semibold py-3.5 px-4 text-base border-none rounded-lg cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(33,118,255,0.3)] active:translate-y-0 disabled:bg-[#6c757d] disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none mt-4"
+                disabled={isLoading || isSubmitting || !isFormValid}
+                className="w-full bg-[#2176ff] hover:bg-[#1a5bb8] text-white font-semibold py-3.5 px-4 text-base border-none rounded-lg cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(33,118,255,0.3)] active:translate-y-0 disabled:bg-[#6c757d] disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none mt-4 relative overflow-hidden group"
               >
-                {isLoading ? 'Signing in...' : 'Sign In'}
+                {isLoading || isSubmitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Signing in...
+                  </span>
+                ) : 'Sign In'}
+                <span className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300"></span>
               </button>
             </form>
 
