@@ -86,7 +86,7 @@ export default function RegisterPage() {
     });
   };
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: 'email' | 'username' | 'password' | 'password2', value: string) => {
     updateField(field, value);
     setTouched(prev => ({ ...prev, [field]: true }));
   };

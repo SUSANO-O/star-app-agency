@@ -150,7 +150,7 @@ export function useMountTransition(isMounted: boolean, unmountDelay: number = 30
   const [shouldRender, setShouldRender] = useState(false);
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     if (isMounted && !shouldRender) {
       setShouldRender(true);
@@ -192,7 +192,7 @@ export function useClipboard(timeout: number = 2000) {
 export function useLoadingTimeout(initialState: boolean = false, timeout: number = 30000) {
   const [isLoading, setIsLoading] = useState(initialState);
   const [isTimeout, setIsTimeout] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const startLoading = useCallback(() => {
     setIsLoading(true);

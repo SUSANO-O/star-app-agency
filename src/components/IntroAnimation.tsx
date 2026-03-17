@@ -123,7 +123,7 @@ const IntroAnimation: React.FC<IntroAnimationProps> = ({
     animate();
 
     // Función para crear la forma de "S"
-    const createS = (triangles: THREE.Mesh[]) => {
+    const createS = (_triangles: THREE.Mesh[]) => {
       const sPositions = [
         new THREE.Vector3(-1.0, 1.2, 0.0),
         new THREE.Vector3(1.0, 0.7, 0.0),
