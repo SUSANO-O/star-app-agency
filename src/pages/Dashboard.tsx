@@ -1,4 +1,5 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, memo, lazy, Suspense } from 'react';
+import { Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Rocket,
@@ -19,11 +20,19 @@ import {
   Linkedin,
   Zap,
   LogOut,
-  AlertTriangle
+  AlertTriangle,
+  FileSignature,
+  FlaskConical,
 } from 'lucide-react';
 import { useAuth } from '../lib/useAuth';
 import AuthGuard from '../components/AuthGuard';
+import { AppLogo } from '../components/AppLogo';
 import { useAppStore } from '../lib/store';
+const CampaignContractModal = lazy(
+  () => import('../features/digital-signature/CampaignContractModal').then((m) => ({
+    default: m.CampaignContractModal,
+  })),
+);
 
 interface Notification {
   message: string;
@@ -43,6 +52,10 @@ const Dashboard = () => {
   const [notification, setNotification] = useState<Notification | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [contractModal, setContractModal] = useState<{
+    campaignId: string;
+    campaignName: string;
+  } | null>(null);
   const { user, logout } = useAuth();
 
   // Helper to show notification
@@ -136,15 +149,7 @@ const Dashboard = () => {
       <div className="flex h-screen bg-white text-slate-800 font-sans antialiased overflow-hidden">
         {/* Sidebar */}
         <nav className="w-72 border-r border-slate-100 bg-slate-50/30 flex flex-col p-8 space-y-10">
-          <div className="flex items-center gap-3 px-2">
-            <div className="w-12 h-12 bg-gradient-to-tr from-[#FF007A] via-[#FF5C00] to-[#FFD600] rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-              <Rocket className="text-white" size={28} />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xl font-black tracking-tighter text-slate-900 leading-none uppercase">Start App</span>
-              <span className="text-sm font-bold text-slate-400">AGENCY 360</span>
-            </div>
-          </div>
+          <AppLogo size="md" showText className="px-2" />
 
           <div className="space-y-3 flex-1">
             {[
@@ -169,6 +174,13 @@ const Dashboard = () => {
           </div>
 
           <div className="pt-6 border-t border-slate-100 space-y-3">
+            <Link
+              to="/demo/contrato"
+              className="w-full flex items-center gap-3 px-5 py-3 text-slate-400 hover:text-fuchsia-600 transition-all font-semibold rounded-xl hover:bg-fuchsia-50 focus:outline-none focus:ring-2 focus:ring-fuchsia-300"
+            >
+              <FlaskConical size={20} />
+              <span>Demo contrato</span>
+            </Link>
             <button
               onClick={() => showToast('Configuración en desarrollo', 'warning')}
               className="w-full flex items-center gap-3 px-5 py-3 text-slate-400 hover:text-slate-900 transition-all font-semibold rounded-xl hover:bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
@@ -225,13 +237,38 @@ const Dashboard = () => {
 
           <div className="px-10 pb-10 mt-6">
             {activeTab === 'dashboard' && <DashboardView />}
-            {activeTab === 'campaigns' && <CampaignLauncher showToast={showToast} />}
+            {activeTab === 'campaigns' && (
+              <CampaignLauncher
+                showToast={showToast}
+                onOpenContract={(campaignId, campaignName) =>
+                  setContractModal({ campaignId, campaignName })
+                }
+              />
+            )}
             {activeTab === 'studio' && <AssetStudio showToast={showToast} />}
             {activeTab === 'calendar' && <CalendarView />}
           </div>
 
           {notification && <Toast />}
           {confirmDialog && <ConfirmationDialog />}
+          {contractModal && (
+            <Suspense
+              fallback={
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                  <div className="h-10 w-10 animate-spin rounded-full border-4 border-fuchsia-200 border-t-fuchsia-600" />
+                </div>
+              }
+            >
+              <CampaignContractModal
+                campaignId={contractModal.campaignId}
+                campaignName={contractModal.campaignName}
+                onClose={() => setContractModal(null)}
+                onSealed={() =>
+                  showToast(`Contrato sellado: ${contractModal.campaignName}`, 'success')
+                }
+              />
+            </Suspense>
+          )}
         </main>
       </div>
     </AuthGuard>
@@ -335,13 +372,15 @@ DashboardView.displayName = 'DashboardView';
 /* --- Campaign Launcher Section --- */
 interface CampaignLauncherProps {
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
+  onOpenContract: (campaignId: string, campaignName: string) => void;
 }
 
-const CampaignLauncher = memo(({ showToast }: CampaignLauncherProps) => {
+const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherProps) => {
   const [name, setName] = useState('');
   const [selectedObjective, setSelectedObjective] = useState<'Tráfico' | 'Leads' | 'Ventas' | 'Brand' | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
-  const { addCampaign, campaigns, updateCampaign, deleteCampaign } = useAppStore();
+  const { addCampaign, campaigns, updateCampaign, deleteCampaign, campaignContracts } =
+    useAppStore();
 
   const channels = [
     { name: 'Instagram', icon: Instagram },
@@ -459,7 +498,11 @@ const CampaignLauncher = memo(({ showToast }: CampaignLauncherProps) => {
         <div className="max-w-4xl mx-auto mt-10">
           <h3 className="text-2xl font-black text-slate-900 mb-6">Campañas Activas ({campaigns.length})</h3>
           <div className="space-y-4">
-            {campaigns.map((campaign) => (
+            {campaigns.map((campaign) => {
+              const contract = campaignContracts[campaign.id];
+              const contractSealed = contract?.status === 'sealed';
+
+              return (
               <div
                 key={campaign.id}
                 className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg transition-all animate-in fade-in slide-in-from-bottom-2 duration-300"
@@ -467,7 +510,17 @@ const CampaignLauncher = memo(({ showToast }: CampaignLauncherProps) => {
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <h4 className="text-lg font-black text-slate-900">{campaign.name}</h4>
-                    <div className="flex gap-2 mt-2">
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {contractSealed ? (
+                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
+                          <CheckCircle size={12} />
+                          Contrato sellado
+                        </span>
+                      ) : contract ? (
+                        <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold">
+                          Contrato en borrador
+                        </span>
+                      ) : null}
                       <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">
                         {campaign.objective}
                       </span>
@@ -487,7 +540,14 @@ const CampaignLauncher = memo(({ showToast }: CampaignLauncherProps) => {
                       ))}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <button
+                      onClick={() => onOpenContract(campaign.id, campaign.name)}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 font-bold rounded-xl transition-all text-sm"
+                    >
+                      <FileSignature size={16} />
+                      {contractSealed ? 'Ver contrato' : 'Contrato'}
+                    </button>
                     {campaign.status === 'active' ? (
                       <button
                         onClick={() => {
@@ -521,7 +581,8 @@ const CampaignLauncher = memo(({ showToast }: CampaignLauncherProps) => {
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}

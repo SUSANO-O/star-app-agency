@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/useAuth';
 import AuthGuard from '../components/AuthGuard';
+import { AppLogo } from '../components/AppLogo';
 import { useFormPersist, useFormSubmit, useDebounce } from '../lib/hooks';
 
 export default function LoginPage() {
@@ -59,6 +60,9 @@ export default function LoginPage() {
       <div className="min-h-screen bg-[#f0f2f5] flex items-center justify-center p-5 font-['Inter','Segoe_UI',Tahoma,Geneva,Verdana,sans-serif]">
         <div className="w-full max-w-[28rem]">
           <div className="bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] p-10 text-center">
+            <div className="flex justify-center mb-6">
+              <AppLogo size="lg" />
+            </div>
             <h1 className="text-2xl font-semibold text-[#333] mb-8">Sign In</h1>
 
             {error && (

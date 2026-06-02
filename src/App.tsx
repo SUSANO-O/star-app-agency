@@ -1,11 +1,15 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+
+const INTRO_STORAGE_KEY = 'agency360_hasSeenIntro';
 
 // Lazy load pages for better performance
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const LoginIframe = lazy(() => import('./pages/LoginIframe'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const RegisterPage = lazy(() => import('./pages/Register'));
+const ContractDemoPage = lazy(() => import('./pages/ContractDemo'));
+const IntroAnimation = lazy(() => import('./components/IntroAnimation'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -21,13 +25,35 @@ const PageLoader = () => (
 );
 
 function App() {
+  const [showIntro, setShowIntro] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem(INTRO_STORAGE_KEY) !== 'true',
+  );
+
+  const handleIntroComplete = useCallback(() => {
+    localStorage.setItem(INTRO_STORAGE_KEY, 'true');
+    setShowIntro(false);
+  }, []);
+
+  if (showIntro) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <IntroAnimation onComplete={handleIntroComplete} enableSkip />
+      </Suspense>
+    );
+  }
+
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_relativeSplatPath: true,
+      }}
+    >
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<LoginIframe />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/demo/contrato" element={<ContractDemoPage />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

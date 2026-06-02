@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createDefaultContract, normalizeContract } from './contractDefaults';
+import type { CampaignContractData } from './contractTypes';
 
 // Types
 export interface Campaign {
@@ -47,6 +49,8 @@ export interface ActivityItem {
   color: string;
 }
 
+export type { CampaignContractData } from './contractTypes';
+
 interface AppState {
   // Data
   campaigns: Campaign[];
@@ -54,6 +58,7 @@ interface AppState {
   calendarEvents: CalendarEvent[];
   activities: ActivityItem[];
   stats: Stats;
+  campaignContracts: Record<string, CampaignContractData>;
 
   // Campaign Actions
   addCampaign: (campaign: Omit<Campaign, 'id' | 'createdAt'>) => void;
@@ -74,6 +79,25 @@ interface AppState {
 
   // Stats Actions
   updateStats: () => void;
+
+  // Campaign contract / signature
+  getOrCreateCampaignContract: (
+    campaignId: string,
+    campaignName: string,
+  ) => CampaignContractData;
+  updateCampaignContract: (
+    campaignId: string,
+    updates: Partial<CampaignContractData>,
+  ) => void;
+  sealCampaignContract: (
+    campaignId: string,
+    payload: {
+      signatureDataUrl: string;
+      signerName: string;
+      entityName: string;
+    },
+  ) => void;
+  resetCampaignContract: (campaignId: string, campaignName: string) => void;
 
   // Clear all data
   clearAllData: () => void;
@@ -99,6 +123,7 @@ export const useAppStore = create<AppState>()(
       calendarEvents: [],
       activities: [],
       stats: initialStats,
+      campaignContracts: {},
 
       // Campaign Actions
       addCampaign: (campaign) => {
@@ -112,6 +137,8 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           campaigns: [...state.campaigns, newCampaign],
         }));
+
+        get().getOrCreateCampaignContract(newCampaign.id, campaign.name);
 
         // Add activity
         get().addActivity({
@@ -135,9 +162,13 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteCampaign: (id) => {
-        set((state) => ({
-          campaigns: state.campaigns.filter((c) => c.id !== id),
-        }));
+        set((state) => {
+          const { [id]: _removed, ...restContracts } = state.campaignContracts;
+          return {
+            campaigns: state.campaigns.filter((c) => c.id !== id),
+            campaignContracts: restContracts,
+          };
+        });
         get().updateStats();
       },
 
@@ -254,6 +285,86 @@ export const useAppStore = create<AppState>()(
         });
       },
 
+      getOrCreateCampaignContract: (campaignId, campaignName) => {
+        const existing = get().campaignContracts[campaignId];
+        if (existing) {
+          const needsFix =
+            !Array.isArray(existing.clauses) ||
+            existing.clauses.length === 0 ||
+            !existing.documentTitle;
+          if (needsFix) {
+            const normalized = normalizeContract(existing);
+            set((state) => ({
+              campaignContracts: {
+                ...state.campaignContracts,
+                [campaignId]: normalized,
+              },
+            }));
+            return normalized;
+          }
+          return existing;
+        }
+
+        const created = createDefaultContract(campaignId, campaignName);
+        set((state) => ({
+          campaignContracts: {
+            ...state.campaignContracts,
+            [campaignId]: created,
+          },
+        }));
+        return created;
+      },
+
+      updateCampaignContract: (campaignId, updates) => {
+        const current =
+          get().campaignContracts[campaignId] ??
+          createDefaultContract(campaignId, updates.campaignName ?? 'Campaña');
+
+        set((state) => ({
+          campaignContracts: {
+            ...state.campaignContracts,
+            [campaignId]: { ...current, ...updates, campaignId },
+          },
+        }));
+      },
+
+      sealCampaignContract: (campaignId, payload) => {
+        const current =
+          get().campaignContracts[campaignId] ??
+          createDefaultContract(campaignId, 'Campaña');
+
+        const sealed: CampaignContractData = {
+          ...current,
+          ...payload,
+          status: 'sealed',
+          sealedAt: new Date().toISOString(),
+        };
+
+        set((state) => ({
+          campaignContracts: {
+            ...state.campaignContracts,
+            [campaignId]: sealed,
+          },
+        }));
+
+        get().addActivity({
+          type: 'Campaña',
+          title: `Contrato sellado: ${current.campaignName}`,
+          time: 'Ahora',
+          color: 'bg-emerald-500',
+        });
+      },
+
+      resetCampaignContract: (campaignId, campaignName) => {
+        const fresh = createDefaultContract(campaignId, campaignName);
+        set((state) => ({
+          campaignContracts: {
+            ...state.campaignContracts,
+            [campaignId]: fresh,
+          },
+        }));
+      },
+
       // Clear all data
       clearAllData: () => {
         set({
@@ -262,12 +373,23 @@ export const useAppStore = create<AppState>()(
           calendarEvents: [],
           activities: [],
           stats: initialStats,
+          campaignContracts: {},
         });
       },
     }),
     {
       name: 'star-app-storage', // localStorage key
-      version: 1,
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as AppState;
+        if (version < 2) {
+          return {
+            ...state,
+            campaignContracts: state.campaignContracts ?? {},
+          };
+        }
+        return state;
+      },
     }
   )
 );

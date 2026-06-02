@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../lib/useAuth';
 import AuthGuard from '../components/AuthGuard';
+import { AppLogo } from '../components/AppLogo';
 import { Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { useFormPersist, useFormSubmit, useDebounce } from '../lib/hooks';
 
@@ -96,6 +97,9 @@ export default function RegisterPage() {
       <div className="flex min-h-screen items-center justify-center bg-white py-12">
         <Card className="w-full max-w-md p-8 bg-white border-slate-200 shadow-xl rounded-2xl">
           <div className="text-center mb-8">
+            <div className="flex justify-center mb-6">
+              <AppLogo size="lg" />
+            </div>
             <h1 className="text-3xl font-bold text-slate-900 mb-6">Register</h1>
           </div>
           
