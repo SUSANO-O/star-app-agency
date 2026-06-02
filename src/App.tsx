@@ -9,6 +9,7 @@ const LoginIframe = lazy(() => import('./pages/LoginIframe'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const RegisterPage = lazy(() => import('./pages/Register'));
 const ContractDemoPage = lazy(() => import('./pages/ContractDemo'));
+const IntegrationCallback = lazy(() => import('./pages/IntegrationCallback'));
 const IntroAnimation = lazy(() => import('./components/IntroAnimation'));
 
 // Loading fallback component
@@ -54,6 +55,7 @@ function App() {
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/demo/contrato" element={<ContractDemoPage />} />
+          <Route path="/integrations/callback" element={<IntegrationCallback />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -2,48 +2,21 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createDefaultContract, normalizeContract } from './contractDefaults';
 import type { CampaignContractData } from './contractTypes';
+import type {
+  AgencyActivity,
+  AgencyStats,
+  Asset,
+  CalendarEvent,
+  Campaign,
+  IntegrationStatus,
+  SocialPost,
+} from './agencyTypes';
 
-// Types
-export interface Campaign {
-  id: string;
-  name: string;
-  objective: 'Tráfico' | 'Leads' | 'Ventas' | 'Brand';
-  channels: string[];
-  createdAt: string;
-  status: 'active' | 'paused' | 'completed';
-}
-
-export interface Asset {
-  id: string;
-  name: string;
-  ratio: '1:1' | '9:16' | '16:9';
-  createdAt: string;
-  thumbnail?: string;
-}
-
-export interface CalendarEvent {
-  id: string;
-  day: number;
-  title: string;
-  description?: string;
-  type: 'campaign' | 'asset' | 'meeting' | 'other';
-  color: string;
-}
-
-export interface Stats {
-  reach: number;
-  engagement: number;
-  conversions: number;
-  investment: number;
-  reachTrend: string;
-  engagementTrend: string;
-  conversionsTrend: string;
-  investmentTrend: string;
-}
+export type { Campaign, Asset, CalendarEvent } from './agencyTypes';
 
 export interface ActivityItem {
   id: string;
-  type: 'Campaña' | 'Asset' | 'Usuario' | 'Evento';
+  type: string;
   title: string;
   time: string;
   color: string;
@@ -51,59 +24,57 @@ export interface ActivityItem {
 
 export type { CampaignContractData } from './contractTypes';
 
+interface HydratePayload {
+  campaigns: Campaign[];
+  calendarEvents: CalendarEvent[];
+  assets: Asset[];
+  stats: AgencyStats;
+  activities: AgencyActivity[];
+}
+
 interface AppState {
-  // Data
   campaigns: Campaign[];
   assets: Asset[];
   calendarEvents: CalendarEvent[];
   activities: ActivityItem[];
-  stats: Stats;
+  stats: AgencyStats;
   campaignContracts: Record<string, CampaignContractData>;
+  integrations: IntegrationStatus[];
+  socialPosts: SocialPost[];
 
-  // Campaign Actions
+  hydrateFromApi: (data: HydratePayload) => void;
+  setIntegrations: (integrations: IntegrationStatus[]) => void;
+  setSocialPosts: (posts: SocialPost[]) => void;
+  mergeSocialPosts: (posts: SocialPost[]) => void;
+
   addCampaign: (campaign: Omit<Campaign, 'id' | 'createdAt'>) => void;
+  addCampaignFromApi: (campaign: Campaign) => void;
   updateCampaign: (id: string, updates: Partial<Campaign>) => void;
   deleteCampaign: (id: string) => void;
 
-  // Asset Actions
   addAsset: (asset: Omit<Asset, 'id' | 'createdAt'>) => void;
+  addAssetFromApi: (asset: Asset) => void;
   deleteAsset: (id: string) => void;
 
-  // Calendar Actions
-  addCalendarEvent: (event: Omit<CalendarEvent, 'id'>) => void;
+  addCalendarEventFromApi: (event: CalendarEvent) => void;
+  addCalendarEventLegacy: (event: Omit<CalendarEvent, 'id' | 'startAt'> & { day?: number; startAt?: string }) => void;
   updateCalendarEvent: (id: string, updates: Partial<CalendarEvent>) => void;
   deleteCalendarEvent: (id: string) => void;
 
-  // Activity Actions
   addActivity: (activity: Omit<ActivityItem, 'id'>) => void;
-
-  // Stats Actions
   updateStats: () => void;
 
-  // Campaign contract / signature
-  getOrCreateCampaignContract: (
-    campaignId: string,
-    campaignName: string,
-  ) => CampaignContractData;
-  updateCampaignContract: (
-    campaignId: string,
-    updates: Partial<CampaignContractData>,
-  ) => void;
+  getOrCreateCampaignContract: (campaignId: string, campaignName: string) => CampaignContractData;
+  updateCampaignContract: (campaignId: string, updates: Partial<CampaignContractData>) => void;
   sealCampaignContract: (
     campaignId: string,
-    payload: {
-      signatureDataUrl: string;
-      signerName: string;
-      entityName: string;
-    },
+    payload: { signatureDataUrl: string; signerName: string; entityName: string },
   ) => void;
   resetCampaignContract: (campaignId: string, campaignName: string) => void;
-
-  // Clear all data
   clearAllData: () => void;
 }
 
-const initialStats: Stats = {
+const initialStats: AgencyStats = {
   reach: 120000,
   engagement: 4.8,
   conversions: 1240,
@@ -114,49 +85,86 @@ const initialStats: Stats = {
   investmentTrend: '-4.3%',
 };
 
+function formatActivityTime(isoOrLabel: string): string {
+  if (!isoOrLabel.includes('T')) return isoOrLabel;
+  const d = new Date(isoOrLabel);
+  const diff = Date.now() - d.getTime();
+  if (diff < 60000) return 'Ahora';
+  if (diff < 3600000) return `Hace ${Math.floor(diff / 60000)} min`;
+  if (diff < 86400000) return `Hace ${Math.floor(diff / 3600000)} h`;
+  return d.toLocaleDateString('es-ES');
+}
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // Initial State
       campaigns: [],
       assets: [],
       calendarEvents: [],
       activities: [],
       stats: initialStats,
       campaignContracts: {},
+      integrations: [],
+      socialPosts: [],
 
-      // Campaign Actions
+      hydrateFromApi: (data) => {
+        set({
+          campaigns: data.campaigns,
+          calendarEvents: data.calendarEvents,
+          assets: data.assets,
+          stats: data.stats,
+          activities: data.activities.map((a) => ({
+            ...a,
+            time: formatActivityTime(a.time),
+          })),
+        });
+      },
+
+      setIntegrations: (integrations) => set({ integrations }),
+      setSocialPosts: (socialPosts) => set({ socialPosts }),
+
+      mergeSocialPosts: (posts) => {
+        set((state) => {
+          const map = new Map(state.socialPosts.map((p) => [p.id, p]));
+          posts.forEach((p) => map.set(p.id, p));
+          return { socialPosts: Array.from(map.values()) };
+        });
+      },
+
       addCampaign: (campaign) => {
         const newCampaign: Campaign = {
           ...campaign,
           id: `campaign-${Date.now()}`,
           createdAt: new Date().toISOString(),
-          status: 'active',
+          status: campaign.status || 'active',
         };
-
-        set((state) => ({
-          campaigns: [...state.campaigns, newCampaign],
-        }));
-
+        set((state) => ({ campaigns: [...state.campaigns, newCampaign] }));
         get().getOrCreateCampaignContract(newCampaign.id, campaign.name);
-
-        // Add activity
         get().addActivity({
           type: 'Campaña',
           title: `Nueva campaña: ${campaign.name}`,
           time: 'Ahora',
           color: 'bg-fuchsia-500',
         });
-
-        // Update stats
         get().updateStats();
+      },
+
+      addCampaignFromApi: (campaign) => {
+        set((state) => {
+          const exists = state.campaigns.some((c) => c.id === campaign.id);
+          if (exists) {
+            return {
+              campaigns: state.campaigns.map((c) => (c.id === campaign.id ? campaign : c)),
+            };
+          }
+          return { campaigns: [...state.campaigns, campaign] };
+        });
+        get().getOrCreateCampaignContract(campaign.id, campaign.name);
       },
 
       updateCampaign: (id, updates) => {
         set((state) => ({
-          campaigns: state.campaigns.map((c) =>
-            c.id === id ? { ...c, ...updates } : c
-          ),
+          campaigns: state.campaigns.map((c) => (c.id === id ? { ...c, ...updates } : c)),
         }));
         get().updateStats();
       },
@@ -167,53 +175,69 @@ export const useAppStore = create<AppState>()(
           return {
             campaigns: state.campaigns.filter((c) => c.id !== id),
             campaignContracts: restContracts,
+            socialPosts: state.socialPosts.filter((p) => p.campaignId !== id),
           };
         });
         get().updateStats();
       },
 
-      // Asset Actions
       addAsset: (asset) => {
         const newAsset: Asset = {
           ...asset,
           id: `asset-${Date.now()}`,
           createdAt: new Date().toISOString(),
         };
-
-        set((state) => ({
-          assets: [...state.assets, newAsset],
-        }));
-
-        // Add activity
+        set((state) => ({ assets: [...state.assets, newAsset] }));
         get().addActivity({
           type: 'Asset',
           title: `Nuevo asset: ${asset.name}`,
           time: 'Ahora',
           color: 'bg-cyan-500',
         });
-
-        // Update stats
         get().updateStats();
       },
 
-      deleteAsset: (id) => {
-        set((state) => ({
-          assets: state.assets.filter((a) => a.id !== id),
-        }));
+      addAssetFromApi: (asset) => {
+        set((state) => {
+          const exists = state.assets.some((a) => a.id === asset.id);
+          if (exists) {
+            return { assets: state.assets.map((a) => (a.id === asset.id ? asset : a)) };
+          }
+          return { assets: [...state.assets, asset] };
+        });
       },
 
-      // Calendar Actions
-      addCalendarEvent: (event) => {
+      deleteAsset: (id) => {
+        set((state) => ({ assets: state.assets.filter((a) => a.id !== id) }));
+      },
+
+      addCalendarEventFromApi: (event) => {
+        set((state) => ({ calendarEvents: [...state.calendarEvents, event] }));
+        get().addActivity({
+          type: 'Evento',
+          title: event.title,
+          time: 'Ahora',
+          color: 'bg-orange-500',
+        });
+      },
+
+      addCalendarEventLegacy: (event) => {
+        const startAt =
+          event.startAt ||
+          (event.day
+            ? new Date(new Date().getFullYear(), new Date().getMonth(), event.day).toISOString()
+            : new Date().toISOString());
         const newEvent: CalendarEvent = {
-          ...event,
           id: `event-${Date.now()}`,
+          title: event.title,
+          description: event.description,
+          type: event.type || 'other',
+          color: event.color,
+          startAt,
+          endAt: event.endAt,
+          campaignId: event.campaignId,
         };
-
-        set((state) => ({
-          calendarEvents: [...state.calendarEvents, newEvent],
-        }));
-
-        // Add activity
+        set((state) => ({ calendarEvents: [...state.calendarEvents, newEvent] }));
         get().addActivity({
           type: 'Evento',
           title: event.title,
@@ -225,7 +249,7 @@ export const useAppStore = create<AppState>()(
       updateCalendarEvent: (id, updates) => {
         set((state) => ({
           calendarEvents: state.calendarEvents.map((e) =>
-            e.id === id ? { ...e, ...updates } : e
+            e.id === id ? { ...e, ...updates } : e,
           ),
         }));
       },
@@ -236,47 +260,37 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      // Activity Actions
       addActivity: (activity) => {
         const newActivity: ActivityItem = {
           ...activity,
           id: `activity-${Date.now()}`,
         };
-
         set((state) => ({
-          activities: [newActivity, ...state.activities].slice(0, 10), // Keep only last 10
+          activities: [newActivity, ...state.activities].slice(0, 10),
         }));
       },
 
-      // Stats Actions
       updateStats: () => {
         const { campaigns, assets } = get();
-        const activeCampaigns = campaigns.filter((c) => c.status === 'active').length;
+        const activeCampaigns = campaigns.filter(
+          (c) => c.status === 'active' || c.status === 'scheduled',
+        ).length;
         const totalAssets = assets.length;
-
-        // Calculate dynamic stats based on campaigns and assets
         const baseReach = 120000;
         const reachBoost = activeCampaigns * 15000 + totalAssets * 5000;
-        const newReach = baseReach + reachBoost;
-
         const baseEngagement = 4.8;
         const engagementBoost = activeCampaigns * 0.3 + totalAssets * 0.1;
-        const newEngagement = Math.min(baseEngagement + engagementBoost, 15);
-
         const baseConversions = 1240;
         const conversionsBoost = activeCampaigns * 200 + totalAssets * 50;
-        const newConversions = baseConversions + conversionsBoost;
-
         const baseInvestment = 8200;
         const investmentIncrease = activeCampaigns * 500;
-        const newInvestment = baseInvestment + investmentIncrease;
 
         set({
           stats: {
-            reach: newReach,
-            engagement: parseFloat(newEngagement.toFixed(1)),
-            conversions: newConversions,
-            investment: newInvestment,
+            reach: baseReach + reachBoost,
+            engagement: parseFloat(Math.min(baseEngagement + engagementBoost, 15).toFixed(1)),
+            conversions: baseConversions + conversionsBoost,
+            investment: baseInvestment + investmentIncrease,
             reachTrend: '+12.5%',
             engagementTrend: '+2.1%',
             conversionsTrend: '+18.2%',
@@ -295,22 +309,15 @@ export const useAppStore = create<AppState>()(
           if (needsFix) {
             const normalized = normalizeContract(existing);
             set((state) => ({
-              campaignContracts: {
-                ...state.campaignContracts,
-                [campaignId]: normalized,
-              },
+              campaignContracts: { ...state.campaignContracts, [campaignId]: normalized },
             }));
             return normalized;
           }
           return existing;
         }
-
         const created = createDefaultContract(campaignId, campaignName);
         set((state) => ({
-          campaignContracts: {
-            ...state.campaignContracts,
-            [campaignId]: created,
-          },
+          campaignContracts: { ...state.campaignContracts, [campaignId]: created },
         }));
         return created;
       },
@@ -319,7 +326,6 @@ export const useAppStore = create<AppState>()(
         const current =
           get().campaignContracts[campaignId] ??
           createDefaultContract(campaignId, updates.campaignName ?? 'Campaña');
-
         set((state) => ({
           campaignContracts: {
             ...state.campaignContracts,
@@ -332,21 +338,15 @@ export const useAppStore = create<AppState>()(
         const current =
           get().campaignContracts[campaignId] ??
           createDefaultContract(campaignId, 'Campaña');
-
         const sealed: CampaignContractData = {
           ...current,
           ...payload,
           status: 'sealed',
           sealedAt: new Date().toISOString(),
         };
-
         set((state) => ({
-          campaignContracts: {
-            ...state.campaignContracts,
-            [campaignId]: sealed,
-          },
+          campaignContracts: { ...state.campaignContracts, [campaignId]: sealed },
         }));
-
         get().addActivity({
           type: 'Campaña',
           title: `Contrato sellado: ${current.campaignName}`,
@@ -358,14 +358,10 @@ export const useAppStore = create<AppState>()(
       resetCampaignContract: (campaignId, campaignName) => {
         const fresh = createDefaultContract(campaignId, campaignName);
         set((state) => ({
-          campaignContracts: {
-            ...state.campaignContracts,
-            [campaignId]: fresh,
-          },
+          campaignContracts: { ...state.campaignContracts, [campaignId]: fresh },
         }));
       },
 
-      // Clear all data
       clearAllData: () => {
         set({
           campaigns: [],
@@ -374,22 +370,42 @@ export const useAppStore = create<AppState>()(
           activities: [],
           stats: initialStats,
           campaignContracts: {},
+          socialPosts: [],
         });
       },
     }),
     {
-      name: 'star-app-storage', // localStorage key
-      version: 2,
+      name: 'star-app-storage',
+      version: 3,
       migrate: (persisted, version) => {
         const state = persisted as AppState;
         if (version < 2) {
+          return { ...state, campaignContracts: state.campaignContracts ?? {} };
+        }
+        if (version < 3) {
+          const events = (state.calendarEvents ?? []).map((e: CalendarEvent & { day?: number }) => {
+            if (e.startAt) return e;
+            if (e.day) {
+              return {
+                ...e,
+                startAt: new Date(
+                  new Date().getFullYear(),
+                  new Date().getMonth(),
+                  e.day,
+                ).toISOString(),
+              };
+            }
+            return { ...e, startAt: new Date().toISOString() };
+          });
           return {
             ...state,
-            campaignContracts: state.campaignContracts ?? {},
+            calendarEvents: events,
+            integrations: state.integrations ?? [],
+            socialPosts: state.socialPosts ?? [],
           };
         }
         return state;
       },
-    }
-  )
+    },
+  ),
 );

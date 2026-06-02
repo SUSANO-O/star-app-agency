@@ -29,3 +29,8 @@ dist-ssr
 *.sln
 *.sw?
 
+# Agency API local data
+server/data/db.json
+server/data/uploads/*
+!server/data/uploads/.gitkeep
+!server/data/.gitkeep

@@ -170,7 +170,11 @@ class ApiService {
       const data = await res.json();
 
       if (data.success && data.access) {
-        this.setCredentials(credentials.email, credentials.password);
+        if (data.authType === 'jwt' || data.access.startsWith('eyJ')) {
+          this.setToken(data.access, credentials.email, data.user);
+        } else {
+          this.setCredentials(credentials.email, credentials.password);
+        }
         console.log('✅ apiService: Login exitoso vía login-360');
         return {
           access: data.access,

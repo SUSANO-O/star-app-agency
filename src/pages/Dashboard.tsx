@@ -1,5 +1,5 @@
-import { useState, useCallback, memo, lazy, Suspense } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useCallback, memo, lazy, Suspense, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   LayoutDashboard,
   Rocket,
@@ -28,6 +28,12 @@ import { useAuth } from '../lib/useAuth';
 import AuthGuard from '../components/AuthGuard';
 import { AppLogo } from '../components/AppLogo';
 import { useAppStore } from '../lib/store';
+import { useAgencySync, useAgencyActions } from '../hooks/useAgencySync';
+import { IntegrationsPanel } from '../components/agency/IntegrationsPanel';
+import { CalendarView } from '../components/agency/CalendarView';
+import { PublishCampaignModal } from '../components/agency/PublishCampaignModal';
+import type { Campaign } from '../lib/agencyTypes';
+
 const CampaignContractModal = lazy(
   () => import('../features/digital-signature/CampaignContractModal').then((m) => ({
     default: m.CampaignContractModal,
@@ -48,7 +54,8 @@ interface ConfirmDialog {
 }
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'dashboard');
   const [notification, setNotification] = useState<Notification | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -57,6 +64,26 @@ const Dashboard = () => {
     campaignName: string;
   } | null>(null);
   const { user, logout } = useAuth();
+  const { apiOnline, syncing, syncError, syncAll } = useAgencySync();
+  const integrations = useAppStore((s) => s.integrations);
+  const googleConnected = integrations.some((i) => i.provider === 'google' && i.connected);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) setActiveTab(tab);
+  }, [searchParams]);
+
+  const setTab = useCallback(
+    (tab: string) => {
+      setActiveTab(tab);
+      if (tab === 'dashboard') {
+        setSearchParams({});
+      } else {
+        setSearchParams({ tab });
+      }
+    },
+    [setSearchParams],
+  );
 
   // Helper to show notification
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
@@ -157,10 +184,11 @@ const Dashboard = () => {
               { id: 'campaigns', icon: Rocket, label: 'Campañas', color: 'text-orange-500', bg: 'bg-orange-50' },
               { id: 'studio', icon: ImageIcon, label: 'Asset Studio', color: 'text-cyan-500', bg: 'bg-cyan-50' },
               { id: 'calendar', icon: CalendarIcon, label: 'Calendario', color: 'text-rose-500', bg: 'bg-rose-50' },
+              { id: 'integrations', icon: Settings, label: 'Integraciones', color: 'text-violet-600', bg: 'bg-violet-50' },
             ].map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => setTab(item.id)}
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl transition-all group ${
                   activeTab === item.id 
                   ? `${item.bg} ${item.color} shadow-sm ring-1 ring-inset ring-slate-200` 
@@ -182,11 +210,12 @@ const Dashboard = () => {
               <span>Demo contrato</span>
             </Link>
             <button
-              onClick={() => showToast('Configuración en desarrollo', 'warning')}
-              className="w-full flex items-center gap-3 px-5 py-3 text-slate-400 hover:text-slate-900 transition-all font-semibold rounded-xl hover:bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
+              onClick={() => syncAll()}
+              disabled={syncing}
+              className="w-full flex items-center gap-3 px-5 py-3 text-slate-400 hover:text-emerald-600 transition-all font-semibold rounded-xl hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-50"
             >
-              <Settings size={20} className="transition-transform group-hover:rotate-90 duration-300" />
-              <span>Configuración</span>
+              <Zap size={20} />
+              <span>{syncing ? 'Sincronizando...' : 'Sincronizar API'}</span>
             </button>
             <button
               onClick={handleLogout}
@@ -236,6 +265,19 @@ const Dashboard = () => {
           </header>
 
           <div className="px-10 pb-10 mt-6">
+            {apiOnline === false && syncError && (
+              <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-semibold flex items-center justify-between">
+                <span>{syncError}</span>
+                <button type="button" onClick={() => syncAll()} className="text-amber-900 underline text-xs">
+                  Reintentar
+                </button>
+              </div>
+            )}
+            {apiOnline === true && (
+              <div className="mb-4 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
+                API conectada — datos sincronizados
+              </div>
+            )}
             {activeTab === 'dashboard' && <DashboardView />}
             {activeTab === 'campaigns' && (
               <CampaignLauncher
@@ -246,7 +288,10 @@ const Dashboard = () => {
               />
             )}
             {activeTab === 'studio' && <AssetStudio showToast={showToast} />}
-            {activeTab === 'calendar' && <CalendarView />}
+            {activeTab === 'calendar' && (
+              <CalendarView onToast={showToast} googleConnected={googleConnected} />
+            )}
+            {activeTab === 'integrations' && <IntegrationsPanel onToast={showToast} />}
           </div>
 
           {notification && <Toast />}
@@ -379,8 +424,12 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
   const [name, setName] = useState('');
   const [selectedObjective, setSelectedObjective] = useState<'Tráfico' | 'Leads' | 'Ventas' | 'Brand' | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
-  const { addCampaign, campaigns, updateCampaign, deleteCampaign, campaignContracts } =
-    useAppStore();
+  const [publishTarget, setPublishTarget] = useState<Campaign | null>(null);
+  const [launching, setLaunching] = useState(false);
+
+  const { campaigns, campaignContracts, socialPosts } = useAppStore();
+  const { createCampaignRemote, updateCampaignRemote, deleteCampaignRemote, publishCampaignRemote } =
+    useAgencyActions();
 
   const channels = [
     { name: 'Instagram', icon: Instagram },
@@ -397,22 +446,54 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
     );
   };
 
-  const launch = () => {
+  const launch = async () => {
     if (!name) return showToast("Por favor, nombra tu campaña", "error");
     if (!selectedObjective) return showToast("Selecciona un objetivo", "error");
     if (selectedChannels.length === 0) return showToast("Selecciona al menos un canal", "error");
 
-    addCampaign({
-      name,
-      objective: selectedObjective,
-      channels: selectedChannels,
-      status: 'active',
-    });
+    setLaunching(true);
+    try {
+      await createCampaignRemote({
+        name,
+        objective: selectedObjective,
+        channels: selectedChannels,
+        status: 'draft',
+      });
+      showToast(`Campaña "${name}" creada`);
+      setName('');
+      setSelectedObjective(null);
+      setSelectedChannels([]);
+    } catch {
+      showToast('Error al crear campaña', 'error');
+    } finally {
+      setLaunching(false);
+    }
+  };
 
-    showToast(`Campaña "${name}" desplegada con éxito`);
-    setName('');
-    setSelectedObjective(null);
-    setSelectedChannels([]);
+  const handlePublish = async (payload: {
+    copy: string;
+    scheduledAt?: string;
+    platforms?: string[];
+  }) => {
+    if (!publishTarget) return;
+    try {
+      const result = await publishCampaignRemote(publishTarget.id, payload);
+      const urls = Object.values(result.results)
+        .filter((r): r is { externalUrl?: string } => typeof r === 'object' && r !== null)
+        .map((r) => r.externalUrl)
+        .filter(Boolean);
+      if (payload.scheduledAt) {
+        showToast('Campaña programada — revisa el Calendario', 'success');
+      } else if (urls.length) {
+        showToast(`Publicado en ${urls.length} canal(es)`, 'success');
+      } else {
+        showToast('Revisa Integraciones si algún canal falló', 'warning');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al publicar';
+      showToast(msg, 'error');
+      throw err;
+    }
   };
 
   return (
@@ -487,9 +568,10 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
 
         <button
           onClick={launch}
-          className="w-full py-5 bg-slate-900 text-white font-black text-xl rounded-2xl shadow-xl hover:bg-fuchsia-600 transition-all transform hover:-translate-y-1 active:scale-95"
+          disabled={launching}
+          className="w-full py-5 bg-slate-900 text-white font-black text-xl rounded-2xl shadow-xl hover:bg-fuchsia-600 transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50"
         >
-          Lanzar Ahora
+          {launching ? 'Creando...' : 'Crear Campaña'}
         </button>
       </div>
 
@@ -501,6 +583,7 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
             {campaigns.map((campaign) => {
               const contract = campaignContracts[campaign.id];
               const contractSealed = contract?.status === 'sealed';
+              const posts = socialPosts.filter((p) => p.campaignId === campaign.id);
 
               return (
               <div
@@ -526,21 +609,58 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
                       </span>
                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                         campaign.status === 'active' ? 'bg-green-100 text-green-700' :
+                        campaign.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
                         campaign.status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
+                        campaign.status === 'draft' ? 'bg-slate-100 text-slate-600' :
                         'bg-slate-100 text-slate-700'
                       }`}>
-                        {campaign.status === 'active' ? 'Activa' : campaign.status === 'paused' ? 'Pausada' : 'Completada'}
+                        {campaign.status === 'active' ? 'Activa' :
+                         campaign.status === 'scheduled' ? 'Programada' :
+                         campaign.status === 'paused' ? 'Pausada' :
+                         campaign.status === 'draft' ? 'Borrador' : 'Completada'}
                       </span>
                     </div>
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex gap-2 mt-3 flex-wrap">
                       {campaign.channels.map(channel => (
                         <span key={channel} className="text-xs text-slate-500 font-semibold">
                           {channel}
                         </span>
                       ))}
                     </div>
+                    {posts.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {posts.map((p) => (
+                          <div key={p.id} className="text-xs">
+                            <span className="font-bold text-slate-600 capitalize">{p.platform}: </span>
+                            <span className={`font-semibold ${
+                              p.status === 'published' ? 'text-emerald-600' :
+                              p.status === 'scheduled' ? 'text-blue-600' : 'text-red-500'
+                            }`}>
+                              {p.status}
+                            </span>
+                            {p.externalUrl && (
+                              <a
+                                href={p.externalUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-2 text-fuchsia-600 hover:underline"
+                              >
+                                Ver post
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2 justify-end">
+                    <button
+                      onClick={() => setPublishTarget(campaign)}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-fuchsia-500 to-orange-500 hover:opacity-90 text-white font-bold rounded-xl transition-all text-sm"
+                    >
+                      <Rocket size={16} />
+                      Publicar
+                    </button>
                     <button
                       onClick={() => onOpenContract(campaign.id, campaign.name)}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 font-bold rounded-xl transition-all text-sm"
@@ -548,10 +668,10 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
                       <FileSignature size={16} />
                       {contractSealed ? 'Ver contrato' : 'Contrato'}
                     </button>
-                    {campaign.status === 'active' ? (
+                    {campaign.status === 'active' || campaign.status === 'scheduled' ? (
                       <button
                         onClick={() => {
-                          updateCampaign(campaign.id, { status: 'paused' });
+                          updateCampaignRemote(campaign.id, { status: 'paused' });
                           showToast('Campaña pausada');
                         }}
                         className="px-4 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold rounded-xl transition-all text-sm"
@@ -561,7 +681,7 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
                     ) : (
                       <button
                         onClick={() => {
-                          updateCampaign(campaign.id, { status: 'active' });
+                          updateCampaignRemote(campaign.id, { status: 'active' });
                           showToast('Campaña activada');
                         }}
                         className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 font-bold rounded-xl transition-all text-sm"
@@ -571,7 +691,7 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
                     )}
                     <button
                       onClick={() => {
-                        deleteCampaign(campaign.id);
+                        deleteCampaignRemote(campaign.id);
                         showToast('Campaña eliminada', 'success');
                       }}
                       className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl transition-all text-sm"
@@ -585,6 +705,14 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
             })}
           </div>
         </div>
+      )}
+
+      {publishTarget && (
+        <PublishCampaignModal
+          campaign={publishTarget}
+          onClose={() => setPublishTarget(null)}
+          onPublish={handlePublish}
+        />
       )}
     </div>
   );
@@ -601,7 +729,9 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
   const [ratio, setRatio] = useState<'1:1' | '9:16' | '16:9'>('1:1');
   const [assetName, setAssetName] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const { addAsset, assets, deleteAsset } = useAppStore();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const { assets } = useAppStore();
+  const { uploadAssetRemote, deleteAssetRemote } = useAgencyActions();
 
   const ratios = [
     { label: 'Start Post', value: '1:1' as const, size: 'w-64 h-64' },
@@ -609,24 +739,22 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
     { label: 'Start Banner', value: '16:9' as const, size: 'w-80 h-44' },
   ];
 
-  const generateAsset = () => {
+  const generateAsset = async () => {
     if (!assetName.trim()) {
       return showToast("Por favor, nombra tu asset", "error");
     }
 
     setIsGenerating(true);
-
-    // Simular generación de asset
-    setTimeout(() => {
-      addAsset({
-        name: assetName,
-        ratio,
-      });
-
-      showToast(`Asset "${assetName}" generado con éxito`);
+    try {
+      await uploadAssetRemote(selectedFile, assetName, ratio);
+      showToast(`Asset "${assetName}" guardado`);
       setAssetName('');
+      setSelectedFile(null);
+    } catch {
+      showToast('Error al subir asset', 'error');
+    } finally {
       setIsGenerating(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -659,6 +787,13 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
         </div>
         <div className="lg:col-span-3 bg-slate-50 rounded-[3rem] flex flex-col items-center justify-center p-20 min-h-[500px] border-4 border-dashed border-slate-100">
           <input
+            type="file"
+            accept="image/*,video/*"
+            onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+            className="mb-4 w-full max-w-md text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-fuchsia-50 file:text-fuchsia-700 file:font-bold"
+            disabled={isGenerating}
+          />
+          <input
             type="text"
             value={assetName}
             onChange={(e) => setAssetName(e.target.value)}
@@ -684,7 +819,7 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
                 </svg>
                 Generando...
               </>
-            ) : 'Generar Asset'}
+            ) : 'Subir Asset'}
           </button>
         </div>
       </div>
@@ -700,15 +835,23 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
                 className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-xl transition-all group animate-in fade-in zoom-in-95 duration-300"
                 style={{ animationDelay: `${i * 100}ms` }}
               >
-                <div className={`${ratios.find(r => r.value === asset.ratio)?.size || 'w-full h-48'} mx-auto bg-gradient-to-br from-cyan-100 to-fuchsia-100 rounded-xl flex items-center justify-center mb-4 group-hover:scale-105 transition-transform`}>
-                  <ImageIcon size={32} className="text-slate-400" />
+                <div className={`${ratios.find(r => r.value === asset.ratio)?.size || 'w-full h-48'} mx-auto bg-gradient-to-br from-cyan-100 to-fuchsia-100 rounded-xl flex items-center justify-center mb-4 group-hover:scale-105 transition-transform overflow-hidden`}>
+                  {asset.url || asset.thumbnail ? (
+                    <img
+                      src={asset.url || asset.thumbnail}
+                      alt={asset.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon size={32} className="text-slate-400" />
+                  )}
                 </div>
                 <h4 className="font-black text-slate-900 mb-2">{asset.name}</h4>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-slate-500 font-semibold">Ratio: {asset.ratio}</span>
                   <button
                     onClick={() => {
-                      deleteAsset(asset.id);
+                      deleteAssetRemote(asset.id);
                       showToast('Asset eliminado');
                     }}
                     className="text-xs text-red-500 hover:text-red-700 font-bold"
@@ -726,104 +869,6 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
 });
 
 AssetStudio.displayName = 'AssetStudio';
-
-/* --- Calendar Section --- */
-const CalendarView = memo(() => {
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [eventTitle, setEventTitle] = useState('');
-  const { calendarEvents, addCalendarEvent } = useAppStore();
-  const days = Array.from({ length: 31 }, (_, i) => i + 1);
-
-  const handleAddEvent = () => {
-    if (selectedDay && eventTitle.trim()) {
-      addCalendarEvent({
-        day: selectedDay,
-        title: eventTitle,
-        type: 'other',
-        color: 'bg-fuchsia-500',
-      });
-      setEventTitle('');
-      setSelectedDay(null);
-    }
-  };
-
-  const getEventsForDay = (day: number) => {
-    return calendarEvents.filter(e => e.day === day);
-  };
-
-  return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-        <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Calendario <span className="text-fuchsia-500">Start</span></h2>
-        <div className="flex gap-2 p-1 bg-slate-50 rounded-xl">
-           <button className="px-5 py-2 bg-white shadow-sm rounded-lg text-xs font-black">MES</button>
-           <button className="px-5 py-2 text-xs font-black text-slate-400">SEMANA</button>
-        </div>
-      </div>
-
-      {selectedDay && (
-        <div className="bg-gradient-to-r from-fuchsia-50 to-cyan-50 border-2 border-fuchsia-200 p-6 rounded-3xl animate-in slide-in-from-top-4 duration-300">
-          <h3 className="text-lg font-black text-slate-900 mb-4">Agregar evento - Día {selectedDay}</h3>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={eventTitle}
-              onChange={(e) => setEventTitle(e.target.value)}
-              placeholder="Nombre del evento"
-              className="flex-1 px-4 py-3 rounded-xl border-2 border-fuchsia-200 focus:border-fuchsia-500 focus:outline-none font-semibold"
-              onKeyPress={(e) => e.key === 'Enter' && handleAddEvent()}
-            />
-            <button
-              onClick={handleAddEvent}
-              className="px-6 py-3 bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-black rounded-xl transition-all"
-            >
-              Agregar
-            </button>
-            <button
-              onClick={() => { setSelectedDay(null); setEventTitle(''); }}
-              className="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-black rounded-xl transition-all"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-7 gap-4">
-        {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => (
-          <div key={d} className="text-center text-[10px] font-black text-slate-300 uppercase tracking-widest mb-2">{d}</div>
-        ))}
-        {days.map(d => {
-          const dayEvents = getEventsForDay(d);
-          const hasEvents = dayEvents.length > 0;
-          return (
-            <div
-              key={d}
-              onClick={() => setSelectedDay(d)}
-              className={`min-h-[120px] bg-white border p-4 rounded-2xl transition-all cursor-pointer group ${
-                selectedDay === d ? 'border-fuchsia-500 shadow-lg' : hasEvents ? 'border-fuchsia-200' : 'border-slate-50 hover:border-fuchsia-200'
-              }`}
-            >
-              <span className={`text-sm font-black inline-flex items-center justify-center ${
-                hasEvents ? 'bg-fuchsia-500 text-white w-8 h-8 rounded-lg shadow-lg' : 'text-slate-400'
-              }`}>
-                {d}
-              </span>
-              {dayEvents.map((event, i) => (
-                <div key={event.id} className="mt-2">
-                  <div className={`h-2 w-full ${event.color} rounded-full animate-in fade-in duration-200`} style={{ animationDelay: `${i * 100}ms` }}></div>
-                  <p className="text-[9px] font-bold text-slate-600 mt-1 truncate">{event.title}</p>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-
-CalendarView.displayName = 'CalendarView';
 
 export default Dashboard;
 
