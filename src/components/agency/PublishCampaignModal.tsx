@@ -15,7 +15,7 @@ interface PublishCampaignModalProps {
 
 export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCampaignModalProps) {
   const [copy, setCopy] = useState(
-    campaign.copy || `🚀 ${campaign.name}\n\nObjetivo: ${campaign.objective}\n\n#Agency360 #Marketing`,
+    campaign.copy || `🚀 ${campaign.name}\n\nObjective: ${campaign.objective}\n\n#Agency360 #Marketing`,
   );
   const [schedule, setSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
@@ -40,14 +40,14 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
   const minDatetime = new Date(Date.now() + 5 * 60000).toISOString().slice(0, 16);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 animate-in zoom-in-95">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h3 className="text-xl font-black text-slate-900">Publicar campaña</h3>
-            <p className="text-sm text-slate-500 mt-1">{campaign.name}</p>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 animate-in fade-in">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+        <div className="flex justify-between items-start mb-6 gap-4">
+          <div className="min-w-0">
+            <h3 className="text-lg sm:text-xl font-black text-slate-900">Publish campaign</h3>
+            <p className="text-sm text-slate-500 mt-1 truncate">{campaign.name}</p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 shrink-0" aria-label="Close">
             <X size={20} />
           </button>
         </div>
@@ -55,7 +55,7 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
         <div className="space-y-4">
           <div>
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Canales
+              Channels
             </label>
             <div className="flex flex-wrap gap-2 mt-2">
               {campaign.channels.map((ch) => (
@@ -71,7 +71,7 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
 
           <div>
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Texto de la publicación
+              Post copy
             </label>
             <textarea
               value={copy}
@@ -90,7 +90,7 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
             />
             <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
               <Calendar size={16} />
-              Programar publicación
+              Schedule post
             </span>
           </label>
 
@@ -105,13 +105,13 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
           )}
         </div>
 
-        <div className="flex gap-3 mt-8">
+        <div className="flex flex-col-reverse sm:flex-row gap-3 mt-8">
           <button
             type="button"
             onClick={onClose}
             className="flex-1 py-3 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
           >
-            Cancelar
+            Cancel
           </button>
           <button
             type="button"
@@ -124,7 +124,7 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
             ) : (
               <Send size={18} />
             )}
-            {schedule ? 'Programar' : 'Publicar ahora'}
+            {schedule ? 'Schedule' : 'Publish now'}
           </button>
         </div>
       </div>

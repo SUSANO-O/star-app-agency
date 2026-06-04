@@ -253,7 +253,7 @@ export default function IntroAnimation({ onComplete, enableSkip = true }: IntroA
 
       {enableSkip && !showButton && (
         <button type="button" className="intro-skip-btn" onClick={handleSkip}>
-          Saltar intro →
+          Skip intro →
         </button>
       )}
 
@@ -262,7 +262,7 @@ export default function IntroAnimation({ onComplete, enableSkip = true }: IntroA
           type="button"
           className="intro-logo-btn"
           onClick={handleButtonClick}
-          aria-label="Continuar"
+          aria-label="Continue"
         >
           <img src={logoAgency} alt="Agency 360" className="intro-logo-img" draggable={false} />
         </button>

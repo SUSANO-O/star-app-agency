@@ -28,10 +28,10 @@ export function CampaignContractModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
-      aria-label={`Contrato: ${campaignName}`}
+      aria-label={`Contract: ${campaignName}`}
     >
       <div
         className="relative flex h-full max-h-[95vh] w-full max-w-7xl flex-col animate-in zoom-in-95 duration-300"
@@ -50,7 +50,7 @@ export function CampaignContractModal({
         type="button"
         className="sr-only"
         onClick={onClose}
-        aria-label="Cerrar modal"
+        aria-label="Close modal"
       />
     </div>
   );

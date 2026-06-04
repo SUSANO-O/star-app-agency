@@ -37,7 +37,7 @@ export function useAgencySync() {
       const online = await checkAgencyHealth();
       setApiOnline(online);
       if (!online) {
-        setSyncError('API Agency no disponible. Ejecuta: npm run dev:all');
+        setSyncError('Agency API unavailable. Run: npm run dev:all');
         return false;
       }
 
@@ -59,7 +59,7 @@ export function useAgencySync() {
       setSocialPosts(posts);
       return true;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error de sincronización';
+      const msg = err instanceof Error ? err.message : 'Sync error';
       setSyncError(msg);
       setApiOnline(false);
       return false;

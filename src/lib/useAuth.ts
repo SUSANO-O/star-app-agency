@@ -37,7 +37,7 @@ export const useAuth = () => {
         user: null,
         isAuthenticated: false,
         isLoading: false,
-        error: 'Error al verificar autenticación',
+        error: 'Failed to verify authentication',
       });
     }
   }, []);

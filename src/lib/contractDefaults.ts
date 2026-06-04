@@ -9,13 +9,13 @@ const clause = (id: string, title: string, body: string): ContractClause => ({
 export const DEMO_CAMPAIGN_ID = 'demo-contract';
 export const DEMO_CAMPAIGN_NAME = 'Demo — Summer Launch 2026';
 
-/** Asegura contratos persistidos incompletos (p. ej. tras migración). */
+/** Ensures persisted contracts are complete (e.g. after migration). */
 export function normalizeContract(
   data: Partial<CampaignContractData> & { campaignId: string; campaignName?: string },
 ): CampaignContractData {
   const base = createDefaultContract(
     data.campaignId,
-    data.campaignName ?? 'Campaña',
+    data.campaignName ?? 'Campaign',
     data as Partial<CampaignContractData>,
   );
   return {
@@ -36,40 +36,40 @@ export function createDefaultContract(
   campaignName: string,
   overrides?: Partial<CampaignContractData>,
 ): CampaignContractData {
-  const name = campaignName || 'Campaña sin título';
+  const name = campaignName || 'Untitled campaign';
 
   return {
     campaignId,
     campaignName: name,
-    documentTitle: 'Acuerdo de Prestación de Servicios — Campaña',
+    documentTitle: 'Services Agreement — Campaign',
     documentNumber: `CMP-${Date.now().toString(36).toUpperCase().slice(-6)}`,
-    partyALabel: 'Parte A (Agencia / Divulgadora)',
-    partyBLabel: 'Parte B (Cliente / Receptora)',
+    partyALabel: 'Party A (Agency / Discloser)',
+    partyBLabel: 'Party B (Client / Recipient)',
     signerName: '',
     entityName: '',
-    partyBSignatureText: 'Aprobado Legal',
+    partyBSignatureText: 'Legal Approved',
     partyBPreApproved: true,
-    introParagraph: `Por medio del presente documento se establece un acuerdo vinculante para la ejecución de la campaña publicitaria denominada «${name}», incluyendo creativos, medios, reportes y material confidencial asociado.`,
+    introParagraph: `This document establishes a binding agreement for the advertising campaign «${name}», including creatives, media, reports, and associated confidential materials.`,
     clauses: [
       clause(
         'c1',
-        'Cláusula 1: Objeto de la campaña',
-        `Las partes acuerdan colaborar en el diseño, lanzamiento y medición de la campaña «${name}», conforme al briefing y calendario aprobados. Cualquier alcance adicional requerirá addendum por escrito.`,
+        'Clause 1: Campaign scope',
+        `The parties agree to collaborate on the design, launch, and measurement of the campaign «${name}», in accordance with the approved brief and calendar. Any additional scope requires a written addendum.`,
       ),
       clause(
         'c2',
-        'Cláusula 2: Confidencialidad',
-        'La información estratégica, datos de audiencia, presupuestos y activos creativos se tratarán como estrictamente confidenciales durante la vigencia del acuerdo y por cinco (5) años adicionales.',
+        'Clause 2: Confidentiality',
+        'Strategic information, audience data, budgets, and creative assets shall be treated as strictly confidential during the term of this agreement and for five (5) additional years thereafter.',
       ),
       clause(
         'c3',
-        'Cláusula 3: Propiedad y uso',
-        'Los entregables finales aprobados podrán ser utilizados por el Cliente en los canales pactados. La Agencia conserva derecho de exhibir el caso en portafolio salvo pacto contrario.',
+        'Clause 3: Ownership and use',
+        'Approved final deliverables may be used by the Client on the agreed channels. The Agency retains the right to showcase the case in its portfolio unless otherwise agreed.',
       ),
       clause(
         'c4',
-        'Cláusula 4: Vigencia',
-        'Este acuerdo entra en vigor desde la fecha de firma electrónica y permanece activo hasta la finalización de la campaña y cierre administrativo mutuo.',
+        'Clause 4: Term',
+        'This agreement takes effect upon electronic signature and remains active until the campaign is completed and administratively closed by both parties.',
       ),
     ],
     status: 'draft',

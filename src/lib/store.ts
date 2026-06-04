@@ -89,10 +89,10 @@ function formatActivityTime(isoOrLabel: string): string {
   if (!isoOrLabel.includes('T')) return isoOrLabel;
   const d = new Date(isoOrLabel);
   const diff = Date.now() - d.getTime();
-  if (diff < 60000) return 'Ahora';
-  if (diff < 3600000) return `Hace ${Math.floor(diff / 60000)} min`;
-  if (diff < 86400000) return `Hace ${Math.floor(diff / 3600000)} h`;
-  return d.toLocaleDateString('es-ES');
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)} h ago`;
+  return d.toLocaleDateString('en-US');
 }
 
 export const useAppStore = create<AppState>()(
@@ -141,9 +141,9 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ campaigns: [...state.campaigns, newCampaign] }));
         get().getOrCreateCampaignContract(newCampaign.id, campaign.name);
         get().addActivity({
-          type: 'Campaña',
-          title: `Nueva campaña: ${campaign.name}`,
-          time: 'Ahora',
+          type: 'Campaign',
+          title: `New campaign: ${campaign.name}`,
+          time: 'Just now',
           color: 'bg-fuchsia-500',
         });
         get().updateStats();
@@ -190,8 +190,8 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ assets: [...state.assets, newAsset] }));
         get().addActivity({
           type: 'Asset',
-          title: `Nuevo asset: ${asset.name}`,
-          time: 'Ahora',
+          title: `New asset: ${asset.name}`,
+          time: 'Just now',
           color: 'bg-cyan-500',
         });
         get().updateStats();
@@ -214,9 +214,9 @@ export const useAppStore = create<AppState>()(
       addCalendarEventFromApi: (event) => {
         set((state) => ({ calendarEvents: [...state.calendarEvents, event] }));
         get().addActivity({
-          type: 'Evento',
+          type: 'Event',
           title: event.title,
-          time: 'Ahora',
+          time: 'Just now',
           color: 'bg-orange-500',
         });
       },
@@ -239,9 +239,9 @@ export const useAppStore = create<AppState>()(
         };
         set((state) => ({ calendarEvents: [...state.calendarEvents, newEvent] }));
         get().addActivity({
-          type: 'Evento',
+          type: 'Event',
           title: event.title,
-          time: 'Ahora',
+          time: 'Just now',
           color: 'bg-orange-500',
         });
       },
@@ -325,7 +325,7 @@ export const useAppStore = create<AppState>()(
       updateCampaignContract: (campaignId, updates) => {
         const current =
           get().campaignContracts[campaignId] ??
-          createDefaultContract(campaignId, updates.campaignName ?? 'Campaña');
+          createDefaultContract(campaignId, updates.campaignName ?? 'Campaign');
         set((state) => ({
           campaignContracts: {
             ...state.campaignContracts,
@@ -337,7 +337,7 @@ export const useAppStore = create<AppState>()(
       sealCampaignContract: (campaignId, payload) => {
         const current =
           get().campaignContracts[campaignId] ??
-          createDefaultContract(campaignId, 'Campaña');
+          createDefaultContract(campaignId, 'Campaign');
         const sealed: CampaignContractData = {
           ...current,
           ...payload,
@@ -348,9 +348,9 @@ export const useAppStore = create<AppState>()(
           campaignContracts: { ...state.campaignContracts, [campaignId]: sealed },
         }));
         get().addActivity({
-          type: 'Campaña',
-          title: `Contrato sellado: ${current.campaignName}`,
-          time: 'Ahora',
+          type: 'Campaign',
+          title: `Contract sealed: ${current.campaignName}`,
+          time: 'Just now',
           color: 'bg-emerald-500',
         });
       },

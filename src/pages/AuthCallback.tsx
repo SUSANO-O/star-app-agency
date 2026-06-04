@@ -6,7 +6,7 @@ export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
-  const [message, setMessage] = useState('Procesando login...');
+  const [message, setMessage] = useState('Processing login...');
 
   useEffect(() => {
     const access = searchParams.get('access');
@@ -14,7 +14,7 @@ export default function AuthCallback() {
 
     if (!access || !email) {
       setStatus('error');
-      setMessage('Faltan parámetros de autenticación. Redirigiendo...');
+      setMessage('Missing authentication parameters. Redirecting...');
       setTimeout(() => navigate('/login', { replace: true }), 2000);
       return;
     }
@@ -31,31 +31,31 @@ export default function AuthCallback() {
             apiService.setCredentials(email, password);
             window.dispatchEvent(new CustomEvent('auth-changed'));
             setStatus('success');
-            setMessage('¡Login exitoso! Redirigiendo...');
+            setMessage('Login successful! Redirecting...');
             setTimeout(() => navigate('/', { replace: true }), 1000);
             return;
           }
         }
       } catch {
-        // No es base64 → JWT
+        // Not base64 → JWT
       }
 
       apiService.setToken(access, email);
       window.dispatchEvent(new CustomEvent('auth-changed'));
       setStatus('success');
-      setMessage('¡Login exitoso! Redirigiendo...');
+      setMessage('Login successful! Redirecting...');
       setTimeout(() => navigate('/', { replace: true }), 1000);
     } catch (err) {
       console.error('Auth callback error:', err);
       setStatus('error');
-      setMessage('Error al procesar el login. Redirigiendo...');
+      setMessage('Failed to process login. Redirecting...');
       setTimeout(() => navigate('/login', { replace: true }), 2000);
     }
   }, [searchParams, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-5 bg-[#f0f2f5] font-['Inter','Segoe_UI',Tahoma,Geneva,Verdana,sans-serif]">
-      <div className="w-full max-w-md text-center bg-white rounded-2xl shadow-xl p-10">
+      <div className="w-full max-w-md text-center bg-white rounded-2xl shadow-xl p-8 sm:p-10">
         {status === 'processing' && (
           <>
             <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />

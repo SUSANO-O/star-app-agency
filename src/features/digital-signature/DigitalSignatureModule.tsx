@@ -70,7 +70,7 @@ export function DigitalSignatureModule({
   const previewSignature = contract?.signatureDataUrl;
   const sealDateLabel = useMemo(() => {
     if (!contract?.sealedAt) return undefined;
-    return new Date(contract.sealedAt).toLocaleDateString('es-ES');
+    return new Date(contract.sealedAt).toLocaleDateString('en-US');
   }, [contract?.sealedAt]);
 
   if (!contract) {
@@ -85,13 +85,13 @@ export function DigitalSignatureModule({
     setValidationHint(null);
 
     if (!contract.signerName.trim() || !contract.entityName.trim()) {
-      setValidationHint('Complete representante legal y entidad cliente antes de sellar.');
+      setValidationHint('Complete legal representative and client entity before sealing.');
       return;
     }
 
     if (!pad.hasSignature) {
       setShakePad(true);
-      setValidationHint('Dibuje su firma en el área indicada.');
+      setValidationHint('Draw your signature in the designated area.');
       pad.containerRef.current?.classList.add('ring-2', 'ring-rose-400');
       window.setTimeout(() => {
         setShakePad(false);
@@ -136,10 +136,10 @@ export function DigitalSignatureModule({
               <PenTool className="h-6 w-6" />
             </div>
             <h2 className="text-xl font-black tracking-tight text-slate-900 md:text-2xl">
-              {mode === 'demo' ? 'Demo — Contrato editable' : 'Contrato de campaña'}
+              {mode === 'demo' ? 'Demo — Editable contract' : 'Campaign contract'}
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-slate-500">
-              Personalice el documento, dibuje la firma y selle el acuerdo vinculado a{' '}
+              Customize the document, draw your signature, and seal the agreement linked to{' '}
               <span className="font-semibold text-fuchsia-600">{campaignName}</span>.
             </p>
           </div>
@@ -148,7 +148,7 @@ export function DigitalSignatureModule({
               type="button"
               onClick={onClose}
               className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-white hover:text-slate-700"
-              aria-label="Cerrar"
+              aria-label="Close"
             >
               <X className="h-5 w-5" />
             </button>
@@ -157,14 +157,14 @@ export function DigitalSignatureModule({
 
         <section
           className="mb-6 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-          aria-label="Editor del contrato"
+          aria-label="Contract editor"
         >
           <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
             <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">
-              Editor del contrato
+              Contract editor
             </h3>
             <p className="mt-0.5 text-xs text-slate-500">
-              Los cambios se reflejan al instante en la vista previa →
+              Changes appear instantly in the preview →
             </p>
           </div>
           <div className="max-h-[min(50vh,480px)] overflow-y-auto p-4 md:max-h-[min(45vh,520px)]">
@@ -181,7 +181,7 @@ export function DigitalSignatureModule({
           <div className="mb-3 flex items-center justify-between">
             <label className="flex items-center text-xs font-bold uppercase tracking-wider text-slate-600">
               <PenLine className="mr-2 h-4 w-4 text-slate-400" />
-              Área de firma
+              Signature area
             </label>
             <button
               type="button"
@@ -190,7 +190,7 @@ export function DigitalSignatureModule({
               className="flex items-center text-xs font-semibold text-slate-400 hover:text-rose-500 disabled:opacity-40"
             >
               <RotateCcw className="mr-1 h-3 w-3" />
-              Reiniciar
+              Reset
             </button>
           </div>
           <div
@@ -209,12 +209,12 @@ export function DigitalSignatureModule({
               {pad.padLocked || readOnly ? (
                 <>
                   <Lock className="mb-2 h-8 w-8 opacity-40" />
-                  <span className="text-sm font-medium">Firma capturada</span>
+                  <span className="text-sm font-medium">Signature captured</span>
                 </>
               ) : (
                 <>
                   <PenLine className="mb-2 h-10 w-10 opacity-50" />
-                  <span className="text-sm font-medium">Dibuje su firma aquí</span>
+                  <span className="text-sm font-medium">Draw your signature here</span>
                 </>
               )}
             </div>
@@ -257,12 +257,12 @@ export function DigitalSignatureModule({
                 {sealBtnDone ? (
                   <>
                     <Check className="h-5 w-5" />
-                    Documento sellado
+                    Document sealed
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="h-5 w-5 text-slate-400" />
-                    Sellar y firmar documento
+                    Seal and sign document
                   </>
                 )}
               </button>
@@ -274,13 +274,13 @@ export function DigitalSignatureModule({
               className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white py-4 text-sm font-bold text-slate-700 transition-all hover:border-fuchsia-300 hover:bg-fuchsia-50"
             >
               <RotateCcw className="h-5 w-5" />
-              Editar de nuevo (borrador)
+              Edit again (draft)
             </button>
           )}
 
           <p className="flex items-center justify-center gap-1 text-center text-[10px] text-slate-400">
             <Lock className="h-3 w-3" />
-            Vista previa en tiempo real — almacenamiento local de demostración
+            Live preview — demo local storage only
           </p>
         </div>
         </div>

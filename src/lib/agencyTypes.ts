@@ -14,7 +14,7 @@ export interface PublishResult {
 export interface Campaign {
   id: string;
   name: string;
-  objective: 'Tráfico' | 'Leads' | 'Ventas' | 'Brand';
+  objective: 'Traffic' | 'Leads' | 'Sales' | 'Brand';
   channels: string[];
   createdAt: string;
   status: CampaignStatus;

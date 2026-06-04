@@ -29,25 +29,25 @@ const PROVIDERS: {
     id: 'google',
     icon: Calendar,
     color: 'text-blue-600 bg-blue-50',
-    description: 'Sincroniza publicaciones y eventos de campaña con Google Calendar.',
+    description: 'Sync campaign posts and events with Google Calendar.',
   },
   {
     id: 'meta',
     icon: Instagram,
     color: 'text-fuchsia-600 bg-fuchsia-50',
-    description: 'Publica en Instagram y Facebook Page vinculada.',
+    description: 'Publish to Instagram and linked Facebook Page.',
   },
   {
     id: 'linkedin',
     icon: Linkedin,
     color: 'text-sky-700 bg-sky-50',
-    description: 'Comparte campañas y contenido en LinkedIn.',
+    description: 'Share campaigns and content on LinkedIn.',
   },
   {
     id: 'x',
     icon: Twitter,
     color: 'text-slate-800 bg-slate-100',
-    description: 'Publica en X (Twitter). Requiere API de desarrollador.',
+    description: 'Publish on X (Twitter). Requires developer API access.',
   },
 ];
 
@@ -72,7 +72,7 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
       setEnabledProviders(config.enabled);
       setConfigured(config.configured);
     } catch {
-      onToast('No se pudo cargar el estado de integraciones', 'error');
+      onToast('Could not load integration status', 'error');
     }
   }, [setIntegrations, onToast]);
 
@@ -88,10 +88,10 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
         window.location.href = url;
       } else {
         window.open(url, '_blank', 'noopener,noreferrer');
-        onToast(`Completa la autorización de ${PLATFORM_LABELS[provider]} en la nueva ventana`, 'warning');
+        onToast(`Complete ${PLATFORM_LABELS[provider]} authorization in the new window`, 'warning');
       }
     } catch {
-      onToast(`Error al conectar ${PLATFORM_LABELS[provider]}`, 'error');
+      onToast(`Failed to connect ${PLATFORM_LABELS[provider]}`, 'error');
     } finally {
       setLoading(null);
     }
@@ -102,9 +102,9 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
     try {
       await disconnectIntegration(provider);
       await refresh();
-      onToast(`${PLATFORM_LABELS[provider]} desconectado`, 'success');
+      onToast(`${PLATFORM_LABELS[provider]} disconnected`, 'success');
     } catch {
-      onToast('Error al desconectar', 'error');
+      onToast('Failed to disconnect', 'error');
     } finally {
       setLoading(null);
     }
@@ -114,11 +114,11 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
     integrations.find((i) => i.provider === provider);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-500 px-1">
       <div>
-        <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Integraciones</h2>
-        <p className="text-slate-500 mt-2">
-          Conecta tus cuentas para publicar campañas y sincronizar el calendario.
+        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter">Integrations</h2>
+        <p className="text-slate-500 mt-2 text-sm sm:text-base">
+          Connect your accounts to publish campaigns and sync the calendar.
         </p>
       </div>
 
@@ -131,9 +131,9 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
           return (
             <div
               key={id}
-              className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center gap-4"
+              className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4"
             >
-              <div className={`p-4 rounded-xl shrink-0 ${color}`}>
+              <div className={`p-3 sm:p-4 rounded-xl shrink-0 ${color}`}>
                 <Icon size={28} />
               </div>
               <div className="flex-1 min-w-0">
@@ -142,15 +142,15 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
                   {connected ? (
                     <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">
                       <CheckCircle size={12} />
-                      Conectado {status?.mode === 'demo' ? '(demo)' : '(live)'}
+                      Connected {status?.mode === 'demo' ? '(demo)' : '(live)'}
                     </span>
                   ) : configured[id] ? (
                     <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                      Listo para conectar
+                      Ready to connect
                     </span>
                   ) : (
                     <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
-                      No conectado
+                      Not connected
                     </span>
                   )}
                 </div>
@@ -159,30 +159,30 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
                   <p className="text-xs text-slate-400 mt-1">{status.accountName}</p>
                 )}
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex gap-2 shrink-0 w-full sm:w-auto">
                 {connected ? (
                   <button
                     type="button"
                     onClick={() => disconnect(id)}
                     disabled={isLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all disabled:opacity-50"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all disabled:opacity-50"
                   >
                     {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Unplug size={16} />}
-                    Desconectar
+                    Disconnect
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={() => connect(id)}
                     disabled={isLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-slate-900 hover:bg-fuchsia-600 rounded-xl transition-all disabled:opacity-50"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold text-white bg-slate-900 hover:bg-fuchsia-600 rounded-xl transition-all disabled:opacity-50"
                   >
                     {isLoading ? (
                       <Loader2 size={16} className="animate-spin" />
                     ) : (
                       <ExternalLink size={16} />
                     )}
-                    Conectar
+                    Connect
                   </button>
                 )}
               </div>
@@ -191,9 +191,9 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
         })}
       </div>
 
-      <p className="text-xs text-slate-400 text-center">
-        Solo se muestran las integraciones definidas en <code className="text-slate-500">ENABLED_INTEGRATIONS</code> del servidor.
-        Rellena las claves en <code className="text-slate-500">server/.env</code> para OAuth real; sin claves, funciona en modo demo.
+      <p className="text-xs text-slate-400 text-center px-2">
+        Only integrations listed in server <code className="text-slate-500">ENABLED_INTEGRATIONS</code> are shown.
+        Add keys in <code className="text-slate-500">server/.env</code> for real OAuth; without keys, demo mode is used.
       </p>
     </div>
   );

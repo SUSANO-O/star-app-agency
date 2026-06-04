@@ -39,7 +39,7 @@ export function ContractEditorFields({
         ...contract.clauses,
         {
           id: `clause-${Date.now()}`,
-          title: `Cláusula ${n}`,
+          title: `Clause ${n}`,
           body: '',
         },
       ],
@@ -66,7 +66,7 @@ export function ContractEditorFields({
       <div>
         <label className={labelClass}>
           <FileText className="mr-2 h-4 w-4 text-slate-400" />
-          Título del documento
+          Document title
         </label>
         <input
           type="text"
@@ -81,7 +81,7 @@ export function ContractEditorFields({
         <div>
           <label className={labelClass}>
             <FileText className="mr-2 h-4 w-4 text-slate-400" />
-            Nº referencia
+            Reference no.
           </label>
           <input
             type="text"
@@ -92,7 +92,7 @@ export function ContractEditorFields({
           />
         </div>
         <div>
-          <label className={labelClass}>Campaña vinculada</label>
+          <label className={labelClass}>Linked campaign</label>
           <input
             type="text"
             value={contract.campaignName}
@@ -103,7 +103,7 @@ export function ContractEditorFields({
       </div>
 
       <div>
-        <label className={labelClass}>Párrafo introductorio</label>
+        <label className={labelClass}>Intro paragraph</label>
         <textarea
           rows={3}
           value={contract.introParagraph}
@@ -117,28 +117,28 @@ export function ContractEditorFields({
         <div>
           <label className={labelClass}>
             <User className="mr-2 h-4 w-4 text-slate-400" />
-            Representante legal (Parte A)
+            Legal representative (Party A)
           </label>
           <input
             type="text"
             value={contract.signerName}
             disabled={readOnly}
             onChange={(e) => onChange({ signerName: e.target.value })}
-            placeholder="Nombre del firmante"
+            placeholder="Signer name"
             className={inputClass}
           />
         </div>
         <div>
           <label className={labelClass}>
             <Building2 className="mr-2 h-4 w-4 text-slate-400" />
-            Entidad cliente (Parte B)
+            Client entity (Party B)
           </label>
           <input
             type="text"
             value={contract.entityName}
             disabled={readOnly}
             onChange={(e) => onChange({ entityName: e.target.value })}
-            placeholder="Razón social del cliente"
+            placeholder="Client legal name"
             className={inputClass}
           />
         </div>
@@ -146,7 +146,7 @@ export function ContractEditorFields({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className={labelClass}>Etiqueta Parte A</label>
+          <label className={labelClass}>Party A label</label>
           <input
             type="text"
             value={contract.partyALabel}
@@ -156,7 +156,7 @@ export function ContractEditorFields({
           />
         </div>
         <div>
-          <label className={labelClass}>Etiqueta Parte B</label>
+          <label className={labelClass}>Party B label</label>
           <input
             type="text"
             value={contract.partyBLabel}
@@ -169,7 +169,7 @@ export function ContractEditorFields({
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <label className="mb-3 flex items-center text-xs font-bold uppercase tracking-wider text-slate-600">
-          Firma estilizada Parte B (texto)
+          Party B styled signature (text)
         </label>
         <input
           type="text"
@@ -186,14 +186,14 @@ export function ContractEditorFields({
             onChange={(e) => onChange({ partyBPreApproved: e.target.checked })}
             className="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-500"
           />
-          Marcar Parte B como pre-aprobada
+          Mark Party B as pre-approved
         </label>
       </div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-600">
-            Cláusulas editables
+            Editable clauses
           </p>
           {!readOnly && (
             <button
@@ -202,7 +202,7 @@ export function ContractEditorFields({
               className="flex items-center gap-1 rounded-lg bg-fuchsia-50 px-3 py-1.5 text-xs font-bold text-fuchsia-700 transition-colors hover:bg-fuchsia-100"
             >
               <Plus className="h-3.5 w-3.5" />
-              Añadir
+              Add
             </button>
           )}
         </div>
@@ -222,7 +222,7 @@ export function ContractEditorFields({
                   value={clause.title}
                   disabled={readOnly}
                   onChange={(e) => updateClause(clause.id, { title: e.target.value })}
-                  placeholder="Título de cláusula"
+                  placeholder="Clause title"
                   className={inputClass}
                 />
                 <textarea
@@ -230,7 +230,7 @@ export function ContractEditorFields({
                   value={clause.body}
                   disabled={readOnly}
                   onChange={(e) => updateClause(clause.id, { body: e.target.value })}
-                  placeholder="Contenido de la cláusula"
+                  placeholder="Clause content"
                   className={inputClass}
                 />
               </div>
@@ -241,7 +241,7 @@ export function ContractEditorFields({
                     onClick={() => moveClause(clause.id, 'up')}
                     disabled={index === 0}
                     className="rounded p-1 text-slate-400 hover:bg-white hover:text-slate-700 disabled:opacity-30"
-                    aria-label="Subir cláusula"
+                    aria-label="Move clause up"
                   >
                     <ChevronUp className="h-4 w-4" />
                   </button>
@@ -250,7 +250,7 @@ export function ContractEditorFields({
                     onClick={() => moveClause(clause.id, 'down')}
                     disabled={index === contract.clauses.length - 1}
                     className="rounded p-1 text-slate-400 hover:bg-white hover:text-slate-700 disabled:opacity-30"
-                    aria-label="Bajar cláusula"
+                    aria-label="Move clause down"
                   >
                     <ChevronDown className="h-4 w-4" />
                   </button>
@@ -259,7 +259,7 @@ export function ContractEditorFields({
                     onClick={() => removeClause(clause.id)}
                     disabled={contract.clauses.length <= 1}
                     className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30"
-                    aria-label="Eliminar cláusula"
+                    aria-label="Remove clause"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

@@ -188,11 +188,11 @@ class ApiService {
       }
 
       this.clearCredentials();
-      throw this.handleError({ message: data.error }, 'Credenciales inválidas');
+      throw this.handleError({ message: data.error }, 'Invalid credentials');
     } catch (authError) {
       console.error('❌ apiService: Error en login:', authError);
       this.clearCredentials();
-      throw this.handleError(authError, 'Credenciales inválidas');
+      throw this.handleError(authError, 'Invalid credentials');
     }
   }
 
@@ -211,7 +211,7 @@ class ApiService {
       if (result.success) {
         return { id: '1', email: data.email, username: data.username };
       }
-      throw new Error(result.error || 'Error en el registro');
+      throw new Error(result.error || 'Registration failed');
     } catch (error) {
       throw this.handleError(error, 'Error en el registro');
     }
@@ -225,7 +225,7 @@ class ApiService {
       const response: AxiosResponse<User> = await this.api.get('/profile/');
       return response.data;
     } catch (error) {
-      throw this.handleError(error, 'Error al obtener perfil');
+      throw this.handleError(error, 'Failed to load profile');
     }
   }
 
@@ -241,15 +241,15 @@ class ApiService {
       } else if (axiosError.response?.data?.detail) {
         message = axiosError.response.data.detail;
       } else if (axiosError.response?.status === 400) {
-        message = 'Datos inválidos';
+        message = 'Invalid data';
       } else if (axiosError.response?.status === 401) {
-        message = 'Credenciales inválidas';
+        message = 'Invalid credentials';
       } else if (axiosError.response?.status === 403) {
-        message = 'Acceso prohibido';
+        message = 'Access denied';
       } else if (axiosError.response?.status === 404) {
-        message = 'Recurso no encontrado';
+        message = 'Resource not found';
       } else if (axiosError.response?.status === 500) {
-        message = 'Error del servidor';
+        message = 'Server error';
       }
     } else if (error && typeof error === 'object' && 'message' in error) {
       message = (error as { message: string }).message;

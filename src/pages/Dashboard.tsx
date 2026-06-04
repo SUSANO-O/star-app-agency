@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   FileSignature,
   FlaskConical,
+  Menu,
 } from 'lucide-react';
 import { useAuth } from '../lib/useAuth';
 import AuthGuard from '../components/AuthGuard';
@@ -53,9 +54,18 @@ interface ConfirmDialog {
   cancelText?: string;
 }
 
+const OBJECTIVE_OPTIONS = ['Traffic', 'Leads', 'Sales', 'Brand'] as const;
+type CampaignObjective = (typeof OBJECTIVE_OPTIONS)[number];
+
+function displayObjective(value: string): string {
+  const legacy: Record<string, string> = { 'Tráfico': 'Traffic', Ventas: 'Sales' };
+  return legacy[value] ?? value;
+}
+
 const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notification, setNotification] = useState<Notification | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -76,6 +86,7 @@ const Dashboard = () => {
   const setTab = useCallback(
     (tab: string) => {
       setActiveTab(tab);
+      setSidebarOpen(false);
       if (tab === 'dashboard') {
         setSearchParams({});
       } else {
@@ -98,7 +109,7 @@ const Dashboard = () => {
 
   // Notification Component
   const Toast = () => (
-    <div className={`fixed bottom-6 right-6 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 z-50 transition-all border animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+    <div className={`fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 max-w-md sm:max-w-none mx-auto sm:mx-0 px-4 sm:px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 z-50 transition-all border animate-in slide-in-from-bottom-5 fade-in duration-300 ${
       notification?.type === 'success'
       ? 'bg-white border-emerald-500 text-emerald-600'
       : notification?.type === 'warning'
@@ -129,7 +140,7 @@ const Dashboard = () => {
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-200">
-        <div className="bg-white rounded-3xl p-8 max-w-md mx-4 shadow-2xl animate-in zoom-in-95 duration-300">
+        <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md mx-4 w-[calc(100%-2rem)] shadow-2xl animate-in zoom-in-95 duration-300">
           <h3 className="text-2xl font-black text-slate-900 mb-3">{confirmDialog.title}</h3>
           <p className="text-slate-600 mb-8">{confirmDialog.message}</p>
           <div className="flex gap-3">
@@ -140,13 +151,13 @@ const Dashboard = () => {
               }}
               className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-all hover:-translate-y-0.5 active:translate-y-0"
             >
-              {confirmDialog.confirmText || 'Confirmar'}
+              {confirmDialog.confirmText || 'Confirm'}
             </button>
             <button
               onClick={() => setConfirmDialog(null)}
               className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all hover:-translate-y-0.5 active:translate-y-0"
             >
-              {confirmDialog.cancelText || 'Cancelar'}
+              {confirmDialog.cancelText || 'Cancel'}
             </button>
           </div>
         </div>
@@ -156,12 +167,12 @@ const Dashboard = () => {
 
   const handleLogout = useCallback(() => {
     showConfirm({
-      title: 'Cerrar Sesión',
-      message: '¿Estás seguro que deseas cerrar sesión?',
-      confirmText: 'Sí, cerrar sesión',
-      cancelText: 'Cancelar',
+      title: 'Sign out',
+      message: 'Are you sure you want to sign out?',
+      confirmText: 'Yes, sign out',
+      cancelText: 'Cancel',
       onConfirm: () => {
-        showToast('Sesión cerrada exitosamente', 'success');
+        showToast('Signed out successfully', 'success');
         setTimeout(() => logout(), 500);
       },
     });
@@ -173,18 +184,41 @@ const Dashboard = () => {
 
   return (
     <AuthGuard requireAuth={true}>
-      <div className="flex h-screen bg-white text-slate-800 font-sans antialiased overflow-hidden">
-        {/* Sidebar */}
-        <nav className="w-72 border-r border-slate-100 bg-slate-50/30 flex flex-col p-8 space-y-10">
-          <AppLogo size="md" showText className="px-2" />
+      <div className="flex min-h-screen h-[100dvh] bg-white text-slate-800 font-sans antialiased overflow-hidden">
+        {sidebarOpen && (
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+            aria-label="Close menu"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-          <div className="space-y-3 flex-1">
+        {/* Sidebar */}
+        <nav
+          className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-slate-100 bg-slate-50/95 p-6 sm:p-8 space-y-8 sm:space-y-10 backdrop-blur-md transition-transform duration-300 ease-in-out lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-slate-50/30 ${
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2 px-2">
+            <AppLogo size="md" showText />
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="rounded-xl p-2 text-slate-400 hover:bg-white hover:text-slate-700 lg:hidden"
+              aria-label="Close menu"
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          <div className="space-y-2 sm:space-y-3 flex-1 overflow-y-auto">
             {[
               { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', color: 'text-fuchsia-600', bg: 'bg-fuchsia-50' },
-              { id: 'campaigns', icon: Rocket, label: 'Campañas', color: 'text-orange-500', bg: 'bg-orange-50' },
+              { id: 'campaigns', icon: Rocket, label: 'Campaigns', color: 'text-orange-500', bg: 'bg-orange-50' },
               { id: 'studio', icon: ImageIcon, label: 'Asset Studio', color: 'text-cyan-500', bg: 'bg-cyan-50' },
-              { id: 'calendar', icon: CalendarIcon, label: 'Calendario', color: 'text-rose-500', bg: 'bg-rose-50' },
-              { id: 'integrations', icon: Settings, label: 'Integraciones', color: 'text-violet-600', bg: 'bg-violet-50' },
+              { id: 'calendar', icon: CalendarIcon, label: 'Calendar', color: 'text-rose-500', bg: 'bg-rose-50' },
+              { id: 'integrations', icon: Settings, label: 'Integrations', color: 'text-violet-600', bg: 'bg-violet-50' },
             ].map((item) => (
               <button
                 key={item.id}
@@ -207,7 +241,7 @@ const Dashboard = () => {
               className="w-full flex items-center gap-3 px-5 py-3 text-slate-400 hover:text-fuchsia-600 transition-all font-semibold rounded-xl hover:bg-fuchsia-50 focus:outline-none focus:ring-2 focus:ring-fuchsia-300"
             >
               <FlaskConical size={20} />
-              <span>Demo contrato</span>
+              <span>Contract demo</span>
             </Link>
             <button
               onClick={() => syncAll()}
@@ -215,67 +249,77 @@ const Dashboard = () => {
               className="w-full flex items-center gap-3 px-5 py-3 text-slate-400 hover:text-emerald-600 transition-all font-semibold rounded-xl hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-50"
             >
               <Zap size={20} />
-              <span>{syncing ? 'Sincronizando...' : 'Sincronizar API'}</span>
+              <span>{syncing ? 'Syncing...' : 'Sync API'}</span>
             </button>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-5 py-3 text-slate-400 hover:text-red-600 transition-all font-semibold rounded-xl hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300"
             >
               <LogOut size={20} />
-              <span>Cerrar Sesión</span>
+              <span>Sign out</span>
             </button>
           </div>
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto relative bg-white">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden relative bg-white">
           {/* Header */}
-          <header className="sticky top-0 z-30 flex items-center justify-between p-10 bg-white/90 backdrop-blur-md border-b border-slate-50">
-            <div className="relative w-96">
+          <header className="sticky top-0 z-30 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-4 sm:p-6 lg:p-10 bg-white/90 backdrop-blur-md border-b border-slate-50 shrink-0">
+            <div className="flex items-center gap-3 w-full sm:flex-1 sm:max-w-md lg:max-w-96">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="shrink-0 rounded-xl p-2.5 text-slate-500 hover:bg-slate-100 lg:hidden"
+                aria-label="Open menu"
+              >
+                <Menu size={22} />
+              </button>
+              <div className="relative flex-1 min-w-0">
               <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-all duration-300 ${
                 isSearchFocused ? 'text-fuchsia-500' : 'text-slate-300'
               }`} size={20} />
               <input
                 type="text"
-                placeholder="¿Qué buscas hoy?"
+                placeholder="What are you looking for?"
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
                 className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 focus:ring-2 focus:ring-fuchsia-500 outline-none transition-all placeholder:text-slate-400 font-medium hover:bg-slate-100"
               />
+              </div>
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center justify-end gap-4 sm:gap-6 shrink-0">
               <button
-                onClick={() => showToast('No hay nuevas notificaciones', 'warning')}
+                onClick={() => showToast('No new notifications', 'warning')}
                 className="p-2 text-slate-400 hover:text-fuchsia-600 transition-all relative hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 focus:ring-offset-2 rounded-lg"
-                aria-label="Notificaciones"
+                aria-label="Notifications"
               >
                 <Bell size={24} />
                 <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
               </button>
-              <div className="flex items-center gap-3 group cursor-pointer">
-                <div className="text-right">
-                  <p className="text-sm font-bold text-slate-900">{user?.username || 'Admin Start'}</p>
-                  <p className="text-xs font-semibold text-cyan-600">Plan Enterprise</p>
+              <div className="flex items-center gap-2 sm:gap-3 group cursor-pointer">
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-bold text-slate-900 truncate max-w-[120px] sm:max-w-none">{user?.username || 'Admin Start'}</p>
+                  <p className="text-xs font-semibold text-cyan-600">Enterprise plan</p>
                 </div>
-                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-rose-500 shadow-lg shadow-fuchsia-200 flex items-center justify-center text-white font-black">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-rose-500 shadow-lg shadow-fuchsia-200 flex items-center justify-center text-white font-black text-sm sm:text-base">
                   {userInitials}
                 </div>
               </div>
             </div>
           </header>
 
-          <div className="px-10 pb-10 mt-6">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 pb-6 sm:pb-10 pt-4 sm:pt-6">
             {apiOnline === false && syncError && (
-              <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-semibold flex items-center justify-between">
+              <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-semibold flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
                 <span>{syncError}</span>
-                <button type="button" onClick={() => syncAll()} className="text-amber-900 underline text-xs">
-                  Reintentar
+                <button type="button" onClick={() => syncAll()} className="text-amber-900 underline text-xs self-start sm:self-auto">
+                  Retry
                 </button>
               </div>
             )}
             {apiOnline === true && (
               <div className="mb-4 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
-                API conectada — datos sincronizados
+                API connected — data synced
               </div>
             )}
             {activeTab === 'dashboard' && <DashboardView />}
@@ -309,7 +353,7 @@ const Dashboard = () => {
                 campaignName={contractModal.campaignName}
                 onClose={() => setContractModal(null)}
                 onSealed={() =>
-                  showToast(`Contrato sellado: ${contractModal.campaignName}`, 'success')
+                  showToast(`Contract sealed: ${contractModal.campaignName}`, 'success')
                 }
               />
             </Suspense>
@@ -331,19 +375,19 @@ const DashboardView = memo(() => {
   };
 
   const stats = [
-    { label: 'Alcance Total', value: formatNumber(storeStats.reach), trend: storeStats.reachTrend, icon: Users, color: 'text-fuchsia-600', bg: 'bg-fuchsia-50' },
+    { label: 'Total reach', value: formatNumber(storeStats.reach), trend: storeStats.reachTrend, icon: Users, color: 'text-fuchsia-600', bg: 'bg-fuchsia-50' },
     { label: 'Engagement', value: `${storeStats.engagement}%`, trend: storeStats.engagementTrend, icon: Target, color: 'text-cyan-500', bg: 'bg-cyan-50' },
-    { label: 'Conversiones', value: formatNumber(storeStats.conversions), trend: storeStats.conversionsTrend, icon: TrendingUp, color: 'text-orange-500', bg: 'bg-orange-50' },
-    { label: 'Inversión', value: `$${formatNumber(storeStats.investment)}`, trend: storeStats.investmentTrend, icon: BarChart3, color: storeStats.investmentTrend.startsWith('+') ? 'text-orange-500' : 'text-red-500', bg: storeStats.investmentTrend.startsWith('+') ? 'bg-orange-50' : 'bg-red-50' },
+    { label: 'Conversions', value: formatNumber(storeStats.conversions), trend: storeStats.conversionsTrend, icon: TrendingUp, color: 'text-orange-500', bg: 'bg-orange-50' },
+    { label: 'Investment', value: `$${formatNumber(storeStats.investment)}`, trend: storeStats.investmentTrend, icon: BarChart3, color: storeStats.investmentTrend.startsWith('+') ? 'text-orange-500' : 'text-red-500', bg: storeStats.investmentTrend.startsWith('+') ? 'bg-orange-50' : 'bg-red-50' },
   ];
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+    <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-700">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
         {stats.map((stat, i) => (
           <div
             key={i}
-            className="bg-white border border-slate-100 p-8 rounded-[2rem] hover:shadow-2xl hover:shadow-slate-200/50 transition-all group relative overflow-hidden cursor-pointer hover:-translate-y-1 active:translate-y-0 animate-in fade-in slide-in-from-bottom-4 duration-500"
+            className="bg-white border border-slate-100 p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] hover:shadow-2xl hover:shadow-slate-200/50 transition-all group relative overflow-hidden cursor-pointer hover:-translate-y-1 active:translate-y-0 animate-in fade-in slide-in-from-bottom-4 duration-500"
             style={{ animationDelay: `${i * 100}ms` }}
           >
             <div className="flex justify-between items-start mb-6">
@@ -355,21 +399,21 @@ const DashboardView = memo(() => {
               </span>
             </div>
             <h3 className="text-slate-400 font-bold text-xs uppercase tracking-widest group-hover:text-slate-500 transition-colors">{stat.label}</h3>
-            <p className="text-4xl font-black text-slate-900 mt-2 tracking-tight group-hover:scale-105 transition-transform inline-block">{stat.value}</p>
+            <p className="text-3xl sm:text-4xl font-black text-slate-900 mt-2 tracking-tight group-hover:scale-105 transition-transform inline-block">{stat.value}</p>
             <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-slate-50 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div className="lg:col-span-2 bg-slate-50/50 border border-slate-100 rounded-[2.5rem] p-10">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-black text-slate-900">Rendimiento Semanal</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-10">
+        <div className="lg:col-span-2 bg-slate-50/50 border border-slate-100 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10">
+          <div className="flex justify-between items-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900">Weekly performance</h2>
             <div className="flex gap-2">
               <Zap size={20} className="text-orange-500 fill-orange-500" />
             </div>
           </div>
-          <div className="h-64 flex items-end justify-between gap-4 px-4">
+          <div className="h-48 sm:h-64 flex items-end justify-between gap-2 sm:gap-4 px-2 sm:px-4">
             {[65, 45, 95, 55, 80, 60, 85].map((val, i) => (
               <div key={i} className="w-full space-y-4">
                 <div className="relative w-full bg-white rounded-2xl overflow-hidden h-full border border-slate-100">
@@ -379,15 +423,15 @@ const DashboardView = memo(() => {
                   ></div>
                 </div>
                 <span className="block text-center text-[10px] font-black text-slate-400 uppercase">
-                  {['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'][i]}
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i]}
                 </span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="bg-white border border-slate-100 rounded-[2.5rem] p-10 shadow-xl shadow-slate-100">
-          <h2 className="text-2xl font-black text-slate-900 mb-8">Feed de Actividad</h2>
+        <div className="bg-white border border-slate-100 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 shadow-xl shadow-slate-100">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-6 sm:mb-8">Activity feed</h2>
           <div className="space-y-6">
             {activities.length > 0 ? (
               activities.slice(0, 5).map((item, i) => (
@@ -401,8 +445,8 @@ const DashboardView = memo(() => {
               ))
             ) : (
               <div className="text-center py-8">
-                <p className="text-slate-400 text-sm">No hay actividad reciente</p>
-                <p className="text-slate-300 text-xs mt-2">Crea tu primera campaña o asset</p>
+                <p className="text-slate-400 text-sm">No recent activity</p>
+                <p className="text-slate-300 text-xs mt-2">Create your first campaign or asset</p>
               </div>
             )}
           </div>
@@ -422,7 +466,7 @@ interface CampaignLauncherProps {
 
 const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherProps) => {
   const [name, setName] = useState('');
-  const [selectedObjective, setSelectedObjective] = useState<'Tráfico' | 'Leads' | 'Ventas' | 'Brand' | null>(null);
+  const [selectedObjective, setSelectedObjective] = useState<CampaignObjective | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [publishTarget, setPublishTarget] = useState<Campaign | null>(null);
   const [launching, setLaunching] = useState(false);
@@ -447,9 +491,9 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
   };
 
   const launch = async () => {
-    if (!name) return showToast("Por favor, nombra tu campaña", "error");
-    if (!selectedObjective) return showToast("Selecciona un objetivo", "error");
-    if (selectedChannels.length === 0) return showToast("Selecciona al menos un canal", "error");
+    if (!name) return showToast('Please name your campaign', 'error');
+    if (!selectedObjective) return showToast('Select an objective', 'error');
+    if (selectedChannels.length === 0) return showToast('Select at least one channel', 'error');
 
     setLaunching(true);
     try {
@@ -459,12 +503,12 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
         channels: selectedChannels,
         status: 'draft',
       });
-      showToast(`Campaña "${name}" creada`);
+      showToast(`Campaign "${name}" created`);
       setName('');
       setSelectedObjective(null);
       setSelectedChannels([]);
     } catch {
-      showToast('Error al crear campaña', 'error');
+      showToast('Failed to create campaign', 'error');
     } finally {
       setLaunching(false);
     }
@@ -483,34 +527,34 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
         .map((r) => r.externalUrl)
         .filter(Boolean);
       if (payload.scheduledAt) {
-        showToast('Campaña programada — revisa el Calendario', 'success');
+        showToast('Campaign scheduled — check Calendar', 'success');
       } else if (urls.length) {
-        showToast(`Publicado en ${urls.length} canal(es)`, 'success');
+        showToast(`Published on ${urls.length} channel(s)`, 'success');
       } else {
-        showToast('Revisa Integraciones si algún canal falló', 'warning');
+        showToast('Check Integrations if a channel failed', 'warning');
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error al publicar';
+      const msg = err instanceof Error ? err.message : 'Failed to publish';
       showToast(msg, 'error');
       throw err;
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 py-6">
-      <div className="text-center space-y-2">
-        <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic">Nueva Campaña</h1>
-        <p className="text-slate-400 text-lg font-bold">Impulsa tu marca al siguiente nivel.</p>
+    <div className="max-w-4xl mx-auto space-y-6 sm:space-y-10 animate-in zoom-in-95 duration-500 py-4 sm:py-6">
+      <div className="text-center space-y-2 px-2">
+        <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tighter uppercase italic">New campaign</h1>
+        <p className="text-slate-400 text-base sm:text-lg font-bold">Take your brand to the next level.</p>
       </div>
 
-      <div className="bg-white border border-slate-100 rounded-[3rem] p-12 shadow-2xl space-y-10">
+      <div className="bg-white border border-slate-100 rounded-2xl sm:rounded-[3rem] p-6 sm:p-12 shadow-2xl space-y-8 sm:space-y-10">
         <div className="space-y-3">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Título de la Estrategia</label>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Strategy title</label>
           <input 
             type="text" 
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Ej: Rebranding Start-Up 2026" 
+            placeholder="e.g. Start-Up Rebranding 2026" 
             className="w-full bg-slate-50 border-none rounded-2xl py-5 px-8 text-xl font-bold focus:ring-4 focus:ring-fuchsia-100 outline-none transition-all placeholder:text-slate-300"
           />
         </div>
@@ -518,10 +562,10 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <div className="space-y-6">
             <h3 className="font-black text-slate-900 flex items-center gap-3 text-lg">
-              <Target size={24} className="text-orange-500" /> Objetivo
+              <Target size={24} className="text-orange-500" /> Objective
             </h3>
-            <div className="grid grid-cols-2 gap-4">
-              {(['Tráfico', 'Leads', 'Ventas', 'Brand'] as const).map(obj => (
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              {OBJECTIVE_OPTIONS.map(obj => (
                 <button
                   key={obj}
                   onClick={() => setSelectedObjective(obj)}
@@ -540,9 +584,9 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
 
           <div className="space-y-6">
             <h3 className="font-black text-slate-900 flex items-center gap-3 text-lg">
-              <Users size={24} className="text-cyan-500" /> Canales
+              <Users size={24} className="text-cyan-500" /> Channels
             </h3>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-3 sm:gap-4">
               {channels.map((channel, i) => (
                 <button
                   key={i}
@@ -571,14 +615,14 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
           disabled={launching}
           className="w-full py-5 bg-slate-900 text-white font-black text-xl rounded-2xl shadow-xl hover:bg-fuchsia-600 transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50"
         >
-          {launching ? 'Creando...' : 'Crear Campaña'}
+          {launching ? 'Creating...' : 'Create campaign'}
         </button>
       </div>
 
       {/* Lista de campañas */}
       {campaigns.length > 0 && (
         <div className="max-w-4xl mx-auto mt-10">
-          <h3 className="text-2xl font-black text-slate-900 mb-6">Campañas Activas ({campaigns.length})</h3>
+          <h3 className="text-xl sm:text-2xl font-black text-slate-900 mb-6">Active campaigns ({campaigns.length})</h3>
           <div className="space-y-4">
             {campaigns.map((campaign) => {
               const contract = campaignContracts[campaign.id];
@@ -588,24 +632,24 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
               return (
               <div
                 key={campaign.id}
-                className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg transition-all animate-in fade-in slide-in-from-bottom-2 duration-300"
+                className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all animate-in fade-in slide-in-from-bottom-2 duration-300"
               >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
+                <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
+                  <div className="flex-1 min-w-0">
                     <h4 className="text-lg font-black text-slate-900">{campaign.name}</h4>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {contractSealed ? (
                         <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
                           <CheckCircle size={12} />
-                          Contrato sellado
+                          Contract sealed
                         </span>
                       ) : contract ? (
                         <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold">
-                          Contrato en borrador
+                          Draft contract
                         </span>
                       ) : null}
                       <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">
-                        {campaign.objective}
+                        {displayObjective(campaign.objective)}
                       </span>
                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                         campaign.status === 'active' ? 'bg-green-100 text-green-700' :
@@ -614,10 +658,10 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
                         campaign.status === 'draft' ? 'bg-slate-100 text-slate-600' :
                         'bg-slate-100 text-slate-700'
                       }`}>
-                        {campaign.status === 'active' ? 'Activa' :
-                         campaign.status === 'scheduled' ? 'Programada' :
-                         campaign.status === 'paused' ? 'Pausada' :
-                         campaign.status === 'draft' ? 'Borrador' : 'Completada'}
+                        {campaign.status === 'active' ? 'Active' :
+                         campaign.status === 'scheduled' ? 'Scheduled' :
+                         campaign.status === 'paused' ? 'Paused' :
+                         campaign.status === 'draft' ? 'Draft' : 'Completed'}
                       </span>
                     </div>
                     <div className="flex gap-2 mt-3 flex-wrap">
@@ -645,7 +689,7 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
                                 rel="noopener noreferrer"
                                 className="ml-2 text-fuchsia-600 hover:underline"
                               >
-                                Ver post
+                                View post
                               </a>
                             )}
                           </div>
@@ -653,50 +697,50 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-2 justify-end">
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
                     <button
                       onClick={() => setPublishTarget(campaign)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-fuchsia-500 to-orange-500 hover:opacity-90 text-white font-bold rounded-xl transition-all text-sm"
+                      className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-fuchsia-500 to-orange-500 hover:opacity-90 text-white font-bold rounded-xl transition-all text-sm"
                     >
                       <Rocket size={16} />
-                      Publicar
+                      Publish
                     </button>
                     <button
                       onClick={() => onOpenContract(campaign.id, campaign.name)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 font-bold rounded-xl transition-all text-sm"
+                      className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-4 py-2 bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 font-bold rounded-xl transition-all text-sm"
                     >
                       <FileSignature size={16} />
-                      {contractSealed ? 'Ver contrato' : 'Contrato'}
+                      {contractSealed ? 'View contract' : 'Contract'}
                     </button>
                     {campaign.status === 'active' || campaign.status === 'scheduled' ? (
                       <button
                         onClick={() => {
                           updateCampaignRemote(campaign.id, { status: 'paused' });
-                          showToast('Campaña pausada');
+                          showToast('Campaign paused');
                         }}
-                        className="px-4 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold rounded-xl transition-all text-sm"
+                        className="flex-1 sm:flex-none px-4 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold rounded-xl transition-all text-sm"
                       >
-                        Pausar
+                        Pause
                       </button>
                     ) : (
                       <button
                         onClick={() => {
                           updateCampaignRemote(campaign.id, { status: 'active' });
-                          showToast('Campaña activada');
+                          showToast('Campaign activated');
                         }}
-                        className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 font-bold rounded-xl transition-all text-sm"
+                        className="flex-1 sm:flex-none px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 font-bold rounded-xl transition-all text-sm"
                       >
-                        Activar
+                        Activate
                       </button>
                     )}
                     <button
                       onClick={() => {
                         deleteCampaignRemote(campaign.id);
-                        showToast('Campaña eliminada', 'success');
+                        showToast('Campaign deleted', 'success');
                       }}
-                      className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl transition-all text-sm"
+                      className="flex-1 sm:flex-none px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl transition-all text-sm"
                     >
-                      Eliminar
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -741,36 +785,36 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
 
   const generateAsset = async () => {
     if (!assetName.trim()) {
-      return showToast("Por favor, nombra tu asset", "error");
+      return showToast('Please name your asset', 'error');
     }
 
     setIsGenerating(true);
     try {
       await uploadAssetRemote(selectedFile, assetName, ratio);
-      showToast(`Asset "${assetName}" guardado`);
+      showToast(`Asset "${assetName}" saved`);
       setAssetName('');
       setSelectedFile(null);
     } catch {
-      showToast('Error al subir asset', 'error');
+      showToast('Failed to upload asset', 'error');
     } finally {
       setIsGenerating(false);
     }
   };
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700">
-      <div className="flex justify-between items-end">
+    <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-700">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
         <div>
-          <h2 className="text-4xl font-black text-slate-900 tracking-tighter">ASSET STUDIO <span className="text-cyan-500">360</span></h2>
-          <p className="text-slate-400 font-bold mt-2 uppercase text-xs tracking-widest">Motor creativo impulsado por IA</p>
+          <h2 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tighter">ASSET STUDIO <span className="text-cyan-500">360</span></h2>
+          <p className="text-slate-400 font-bold mt-2 uppercase text-xs tracking-widest">AI-powered creative engine</p>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-slate-500 font-semibold">Assets generados</p>
+        <div className="text-left sm:text-right">
+          <p className="text-sm text-slate-500 font-semibold">Assets created</p>
           <p className="text-3xl font-black text-slate-900">{assets.length}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-12">
         <div className="space-y-4">
           {ratios.map(r => (
             <button 
@@ -785,7 +829,7 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
             </button>
           ))}
         </div>
-        <div className="lg:col-span-3 bg-slate-50 rounded-[3rem] flex flex-col items-center justify-center p-20 min-h-[500px] border-4 border-dashed border-slate-100">
+        <div className="lg:col-span-3 bg-slate-50 rounded-2xl sm:rounded-[3rem] flex flex-col items-center justify-center p-6 sm:p-12 lg:p-20 min-h-[360px] sm:min-h-[500px] border-4 border-dashed border-slate-100">
           <input
             type="file"
             accept="image/*,video/*"
@@ -797,7 +841,7 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
             type="text"
             value={assetName}
             onChange={(e) => setAssetName(e.target.value)}
-            placeholder="Nombre del asset (ej: Banner Verano 2026)"
+            placeholder="Asset name (e.g. Summer Banner 2026)"
             className="mb-8 w-full max-w-md px-6 py-3 rounded-2xl border-2 border-slate-200 focus:border-cyan-500 focus:outline-none font-semibold text-center"
             disabled={isGenerating}
           />
@@ -817,9 +861,9 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Generando...
+                Uploading...
               </>
-            ) : 'Subir Asset'}
+            ) : 'Upload asset'}
           </button>
         </div>
       </div>
@@ -827,7 +871,7 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
       {/* Lista de assets generados */}
       {assets.length > 0 && (
         <div className="mt-10">
-          <h3 className="text-2xl font-black text-slate-900 mb-6">Assets Generados</h3>
+          <h3 className="text-xl sm:text-2xl font-black text-slate-900 mb-6">Created assets</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {assets.map((asset, i) => (
               <div
@@ -852,11 +896,11 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
                   <button
                     onClick={() => {
                       deleteAssetRemote(asset.id);
-                      showToast('Asset eliminado');
+                      showToast('Asset deleted');
                     }}
                     className="text-xs text-red-500 hover:text-red-700 font-bold"
                   >
-                    Eliminar
+                    Delete
                   </button>
                 </div>
               </div>
