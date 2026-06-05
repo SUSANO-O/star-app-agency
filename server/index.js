@@ -10,6 +10,15 @@ import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
+import {
+  buildIntegrationsConfig,
+  exchangeGoogleTokens,
+  exchangeLinkedInTokens,
+  exchangeMetaTokens,
+  getProviderConnectMode,
+  publishToPlatform,
+  syncGoogleCalendarEvent,
+} from './integrations.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -36,6 +45,9 @@ const X_CLIENT_ID = process.env.X_CLIENT_ID || '';
 const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET || '';
 const X_REDIRECT_URI =
   process.env.X_REDIRECT_URI || `${FRONTEND_URL}/integrations/callback`;
+
+const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary';
+const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || '21.0';
 
 const ALL_PROVIDERS = ['google', 'linkedin', 'meta', 'x'];
 const ENABLED_INTEGRATIONS = (process.env.ENABLED_INTEGRATIONS || 'google,linkedin')
@@ -137,41 +149,31 @@ function addActivity(userData, activity) {
   userData.activities = userData.activities.slice(0, 50);
 }
 
-async function publishToPlatform(platform, { copy, mediaUrl, integration }) {
-  const baseUrls = {
-    instagram: 'https://www.instagram.com/p/',
-    facebook: 'https://www.facebook.com/posts/',
-    linkedin: 'https://www.linkedin.com/feed/update/',
-    x: 'https://x.com/i/status/',
-  };
+const integrationConfig = {
+  google: {
+    clientId: GOOGLE_CLIENT_ID,
+    clientSecret: GOOGLE_CLIENT_SECRET,
+    redirectUri: GOOGLE_REDIRECT_URI,
+    calendarId: GOOGLE_CALENDAR_ID,
+  },
+  meta: {
+    appId: META_APP_ID,
+    appSecret: META_APP_SECRET,
+    redirectUri: META_REDIRECT_URI,
+    graphApiVersion: META_GRAPH_API_VERSION,
+  },
+  linkedin: {
+    clientId: LINKEDIN_CLIENT_ID,
+    clientSecret: LINKEDIN_CLIENT_SECRET,
+    redirectUri: LINKEDIN_REDIRECT_URI,
+  },
+};
 
-  if (integration?.accessToken && integration.accessToken !== 'demo-token') {
-    // Real API hooks — extend when OAuth tokens are live
-    if (platform === 'linkedin' && integration.accessToken) {
-      // Placeholder for LinkedIn Share API
-    }
-  }
-
-  const postId = randomUUID().slice(0, 12);
-  return {
-    status: 'published',
-    externalPostId: postId,
-    externalUrl: `${baseUrls[platform] || 'https://example.com/'}${postId}`,
-    message: integration?.connected
-      ? `Publicado en ${platform} (modo ${integration.mode || 'demo'})`
-      : `Simulación: conecta ${platform} en Integraciones para publicación real`,
-  };
-}
-
-async function syncGoogleCalendar(integration, event) {
-  if (!integration?.connected || !GOOGLE_CLIENT_ID) {
-    return { googleEventId: null, syncStatus: 'local' };
-  }
-  // Real Google Calendar API would go here with googleapis + refresh_token
-  return {
-    googleEventId: `gcal_${randomUUID().slice(0, 8)}`,
-    syncStatus: integration.accessToken ? 'synced' : 'local',
-  };
+function providerConnectMode(provider) {
+  return getProviderConnectMode(provider, {
+    hasLiveCredentials,
+    isEnabled: isProviderEnabled,
+  });
 }
 
 const storage = multer.diskStorage({
@@ -195,15 +197,12 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 
 // ─── Integrations config (qué mostrar en UI — sin secretos) ─────────────────
 app.get('/api/v1/agency/integrations/config/', (_req, res) => {
-  res.json({
-    enabled: ENABLED_INTEGRATIONS,
-    configured: {
-      google: hasLiveCredentials('google'),
-      linkedin: hasLiveCredentials('linkedin'),
-      meta: hasLiveCredentials('meta'),
-      x: hasLiveCredentials('x'),
-    },
-  });
+  res.json(
+    buildIntegrationsConfig({
+      enabled: ENABLED_INTEGRATIONS,
+      hasLiveCredentials,
+    }),
+  );
 });
 
 // ─── Integrations status ───────────────────────────────────────────────────
@@ -227,6 +226,14 @@ app.get('/api/v1/agency/integrations/:provider/connect/', (req, res) => {
     return res.status(403).json({ error: 'Integración no habilitada en el servidor' });
   }
 
+  const connectMode = providerConnectMode(provider);
+  if (connectMode === 'coming_soon') {
+    return res.status(503).json({
+      error: 'Integración próximamente disponible',
+      mode: 'coming_soon',
+    });
+  }
+
   const userId = getUserId(req);
   const state = Buffer.from(JSON.stringify({ userId, provider })).toString('base64url');
 
@@ -243,9 +250,9 @@ app.get('/api/v1/agency/integrations/:provider/connect/', (req, res) => {
 
   if (provider === 'meta' && META_APP_ID) {
     const url =
-      `https://www.facebook.com/v19.0/dialog/oauth?client_id=${META_APP_ID}` +
+      `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth?client_id=${META_APP_ID}` +
       `&redirect_uri=${encodeURIComponent(`${META_REDIRECT_URI}?provider=meta`)}` +
-      `&state=${state}&scope=pages_manage_posts,instagram_content_publish`;
+      `&state=${state}&scope=pages_manage_posts,instagram_content_publish,pages_show_list`;
     return res.json({ url, mode: 'oauth' });
   }
 
@@ -272,7 +279,7 @@ app.get('/api/v1/agency/integrations/:provider/connect/', (req, res) => {
   res.json({ url: demoUrl, mode: 'demo' });
 });
 
-app.post('/api/v1/agency/integrations/:provider/callback/', (req, res) => {
+app.post('/api/v1/agency/integrations/:provider/callback/', async (req, res) => {
   const { provider } = req.params;
   const { code } = req.body;
   const db = loadDb();
@@ -286,24 +293,84 @@ app.post('/api/v1/agency/integrations/:provider/callback/', (req, res) => {
     x: 'X (Twitter)',
   };
 
-  user.integrations[provider] = {
-    connected: true,
-    mode: code === 'demo' ? 'demo' : 'live',
-    accessToken: code === 'demo' ? 'demo-token' : code,
-    refreshToken: null,
-    accountName: names[provider] || provider,
-    connectedAt: new Date().toISOString(),
-  };
+  try {
+    if (code === 'demo') {
+      user.integrations[provider] = {
+        connected: true,
+        mode: 'demo',
+        accessToken: 'demo-token',
+        refreshToken: null,
+        accountName: names[provider] || provider,
+        connectedAt: new Date().toISOString(),
+      };
+    } else if (provider === 'google' && hasLiveCredentials('google')) {
+      const tokens = await exchangeGoogleTokens(code, integrationConfig.google);
+      user.integrations[provider] = {
+        connected: true,
+        mode: 'live',
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+        accountName: names[provider],
+        connectedAt: new Date().toISOString(),
+      };
+    } else if (provider === 'meta' && hasLiveCredentials('meta')) {
+      const meta = await exchangeMetaTokens(code, integrationConfig.meta);
+      user.integrations[provider] = {
+        connected: true,
+        mode: 'live',
+        accessToken: meta.accessToken,
+        refreshToken: meta.refreshToken,
+        accountName: meta.accountName,
+        pageId: meta.pageId,
+        pageAccessToken: meta.pageAccessToken,
+        pageName: meta.pageName,
+        igBusinessId: meta.igBusinessId,
+        connectedAt: new Date().toISOString(),
+      };
+    } else if (provider === 'linkedin' && hasLiveCredentials('linkedin')) {
+      const tokens = await exchangeLinkedInTokens(code, integrationConfig.linkedin);
+      user.integrations[provider] = {
+        connected: true,
+        mode: 'live',
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+        accountName: tokens.accountName,
+        connectedAt: new Date().toISOString(),
+      };
+    } else {
+      user.integrations[provider] = {
+        connected: true,
+        mode: 'live',
+        accessToken: code,
+        refreshToken: null,
+        accountName: names[provider] || provider,
+        connectedAt: new Date().toISOString(),
+      };
+    }
 
-  saveDb(db);
-  addActivity(user, {
-    type: 'Integración',
-    title: `${names[provider]} conectado`,
-    color: 'bg-emerald-500',
-  });
-  saveDb(db);
+    saveDb(db);
+    addActivity(user, {
+      type: 'Integración',
+      title: `${names[provider]} conectado (${user.integrations[provider].mode === 'demo' ? 'simulación' : 'OAuth'})`,
+      color: 'bg-emerald-500',
+    });
+    saveDb(db);
 
-  res.json({ success: true, provider, mode: user.integrations[provider].mode });
+    res.json({
+      success: true,
+      provider,
+      mode: user.integrations[provider].mode,
+      accountName: user.integrations[provider].accountName,
+    });
+  } catch (err) {
+    console.error(`Integration callback error (${provider}):`, err.message);
+    res.status(400).json({
+      success: false,
+      error: err.message || 'No se pudo completar la conexión OAuth',
+    });
+  }
 });
 
 app.delete('/api/v1/agency/integrations/:provider/disconnect/', (req, res) => {
@@ -426,14 +493,19 @@ app.post('/api/v1/agency/campaigns/:id/publish/', async (req, res) => {
         campaignId: campaign.id,
         syncStatus: 'local',
       };
-      const gSync = await syncGoogleCalendar(user.integrations.google, calEvent);
+      const gSync = await syncGoogleCalendarEvent(
+        user.integrations.google,
+        calEvent,
+        integrationConfig.google,
+      );
       Object.assign(calEvent, gSync);
       user.calendarEvents.push(calEvent);
     } else {
-      const pub = await publishToPlatform(platform, {
-        copy: copyText,
-        integration,
-      });
+      const pub = await publishToPlatform(
+        platform,
+        { copy: copyText, integration },
+        META_GRAPH_API_VERSION,
+      );
       const post = {
         id: randomUUID(),
         campaignId: campaign.id,
@@ -492,7 +564,11 @@ app.post('/api/v1/agency/calendar/events/', async (req, res) => {
     syncStatus: 'local',
   };
 
-  const gSync = await syncGoogleCalendar(user.integrations.google, event);
+  const gSync = await syncGoogleCalendarEvent(
+    user.integrations.google,
+    event,
+    integrationConfig.google,
+  );
   Object.assign(event, gSync);
 
   user.calendarEvents.push(event);
@@ -576,10 +652,11 @@ app.post('/api/v1/agency/posts/process-scheduled/', async (req, res) => {
         ? 'meta'
         : post.platform;
     const integration = user.integrations[integrationKey];
-    const pub = await publishToPlatform(post.platform, {
-      copy: post.content,
-      integration,
-    });
+    const pub = await publishToPlatform(
+      post.platform,
+      { copy: post.content, integration },
+      META_GRAPH_API_VERSION,
+    );
     Object.assign(post, {
       status: pub.status,
       externalPostId: pub.externalPostId,

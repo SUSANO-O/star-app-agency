@@ -7,6 +7,7 @@ import type {
   CalendarEvent,
   Campaign,
   IntegrationProvider,
+  IntegrationsConfig,
   IntegrationStatus,
   SocialPost,
 } from './agencyTypes';
@@ -136,14 +137,8 @@ export async function deleteAssetApi(id: string): Promise<void> {
 }
 
 // Integrations
-export async function fetchIntegrationsConfig(): Promise<{
-  enabled: string[];
-  configured: Record<string, boolean>;
-}> {
-  const { data } = await agencyClient.get<{
-    enabled: string[];
-    configured: Record<string, boolean>;
-  }>('/integrations/config/');
+export async function fetchIntegrationsConfig(): Promise<IntegrationsConfig> {
+  const { data } = await agencyClient.get<IntegrationsConfig>('/integrations/config/');
   return data;
 }
 
@@ -166,7 +161,7 @@ export async function getIntegrationConnectUrl(
 export async function completeIntegrationCallback(
   provider: IntegrationProvider,
   code: string,
-): Promise<{ success: boolean; mode: string }> {
+): Promise<{ success: boolean; mode: string; accountName?: string; error?: string }> {
   const { data } = await agencyClient.post(`/integrations/${provider}/callback/`, { code });
   return data;
 }

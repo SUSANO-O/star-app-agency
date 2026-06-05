@@ -61,12 +61,35 @@ export interface SocialPost {
   createdAt: string;
 }
 
+export type IntegrationConnectMode = 'demo' | 'oauth' | 'coming_soon' | 'disabled';
+
+export interface IntegrationProviderConfig {
+  configured: boolean;
+  connectMode: IntegrationConnectMode;
+  enabled: boolean;
+}
+
+export interface IntegrationsConfig {
+  enabled: string[];
+  configured: Record<string, boolean>;
+  providers: Record<string, IntegrationProviderConfig>;
+  environment: 'demo' | 'mixed' | 'production';
+}
+
 export interface IntegrationStatus {
   provider: IntegrationProvider;
   connected: boolean;
   mode: 'disconnected' | 'demo' | 'live' | 'oauth';
   accountName: string | null;
 }
+
+export const CHANNEL_INTEGRATION_KEY: Record<string, IntegrationProvider | 'meta'> = {
+  Instagram: 'meta',
+  Facebook: 'meta',
+  LinkedIn: 'linkedin',
+  Twitter: 'x',
+  X: 'x',
+};
 
 export interface AgencyStats {
   reach: number;

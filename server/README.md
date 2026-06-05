@@ -20,7 +20,7 @@ npm run dev:all
 ```env
 AGENCY_API_PORT=8001
 FRONTEND_URL=http://localhost:5173
-ENABLED_INTEGRATIONS=google,linkedin
+ENABLED_INTEGRATIONS=google,meta,linkedin,x
 ```
 
 ### Google Calendar — **recomendado primero**
@@ -31,6 +31,7 @@ Solo 2 claves. El usuario autoriza **un permiso**: crear eventos en su calendari
 |----------|-----------------|
 | `GOOGLE_CLIENT_ID` | Google Cloud → APIs → Calendar API → Credenciales OAuth |
 | `GOOGLE_CLIENT_SECRET` | Misma pantalla |
+| `GOOGLE_CALENDAR_ID` | Opcional, default `primary` |
 
 Redirect URI en Google Console:
 
@@ -40,41 +41,37 @@ http://localhost:8001/api/v1/agency/integrations/google/callback/
 
 Scope mínimo: `https://www.googleapis.com/auth/calendar.events`
 
-### LinkedIn — **opcional** (1 red social)
-
-2 claves. El usuario autoriza publicar en **su perfil** (no páginas de empresa).
+### Meta (Instagram + Facebook) — **OAuth real**
 
 | Variable | Dónde obtenerla |
 |----------|-----------------|
-| `LINKEDIN_CLIENT_ID` | linkedin.com/developers → tu app |
-| `LINKEDIN_CLIENT_SECRET` | Misma app |
+| `META_APP_ID` | developers.facebook.com → tu app |
+| `META_APP_SECRET` | Misma app |
+| `META_GRAPH_API_VERSION` | Opcional, default `21.0` |
 
-Redirect URI:
+Redirect URI en Meta Developer:
 
 ```
 http://localhost:5173/integrations/callback
 ```
 
-Producto: **Share on LinkedIn** · Scope: `w_member_social`
+Permisos: `pages_manage_posts`, `instagram_content_publish`, `pages_show_list`
 
-### No activar al inicio (más permisos / más fricción)
+### LinkedIn / X — **próximamente** (sin keys)
 
-| Integración | Por qué dejarla fuera de `ENABLED_INTEGRATIONS` |
-|-------------|--------------------------------------------------|
-| **Meta** (IG+FB) | App Review, Page + IG Business, 3+ permisos |
-| **X** | API de pago, scopes de escritura |
-
-Cuando las necesites, añade `meta` o `x` a `ENABLED_INTEGRATIONS` y rellena sus claves.
+Aparecen en la UI con badge "Coming soon" y botón deshabilitado.
+Cuando tengas keys, rellena `LINKEDIN_*` o `X_*` y el modo pasa a OAuth real.
 
 ## Resumen rápido
 
 | Objetivo | Keys obligatorias | Permisos que ve el usuario |
 |----------|-------------------|----------------------------|
-| App local + demo | ninguna OAuth | Conectar en 1 clic (demo) |
-| Calendario real | `GOOGLE_*` (2) | "Gestionar eventos de calendario" |
-| + Publicar en LinkedIn | `LINKEDIN_*` (2) | "Publicar en tu nombre" |
-| + IG/FB | `META_*` (2) + review | Varios permisos de Page/IG |
-| + X | `X_*` (2) + plan API | Leer/escribir tweets |
+| App local + demo | ninguna OAuth en google | Conectar en 1 clic (demo) |
+| Calendario real | `GOOGLE_*` (2) + Calendar API | Eventos en Google Calendar |
+| Publicar en Facebook | `META_*` (2) + Page | Post real vía Graph API |
+| Instagram | `META_*` + IG Business | Requiere imagen/video (texto solo no soportado) |
+| LinkedIn / X sin keys | — | "Coming soon" en UI |
+| + LinkedIn / X con keys | `LINKEDIN_*` / `X_*` | OAuth real |
 
 ## Producción
 
@@ -86,6 +83,16 @@ GOOGLE_REDIRECT_URI=https://startapp360.com/api/v1/agency/integrations/google/ca
 LINKEDIN_REDIRECT_URI=https://tu-app.vercel.app/integrations/callback
 ```
 
+## Modos de integración
+
+| Modo | Cuándo | Qué hace |
+|------|--------|----------|
+| **demo** | Proveedor habilitado sin keys OAuth (solo google) | Conexión simulada, sin API real |
+| **oauth** | Keys configuradas en `server/.env` | Autorización real + tokens + API |
+| **coming soon** | LinkedIn/X sin keys | Visible en UI, botón deshabilitado |
+
+El contrato demo (`/demo/contrato`) es independiente de las integraciones.
+
 ## Nota importante
 
-Con las claves configuradas, el OAuth **abre el flujo real**, pero para que los eventos aparezcan en Google Calendar hace falta completar el intercambio de tokens y la llamada a Calendar API en el backend (pendiente de implementación).
+Con `GOOGLE_*` y `META_*` configurados, el backend intercambia tokens OAuth y llama a Google Calendar API y Meta Graph API (Facebook feed). Instagram requiere asset de imagen o video.

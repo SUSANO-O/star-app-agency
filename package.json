@@ -18,6 +18,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
+    "googleapis": "^173.0.0",
     "gsap": "^3.15.0",
     "lucide-react": "^0.309.0",
     "multer": "^1.4.5-lts.1",
