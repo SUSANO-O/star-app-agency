@@ -31,6 +31,11 @@ export interface Asset {
   createdAt: string;
   thumbnail?: string;
   url?: string | null;
+  publicUrl?: string | null;
+  publicId?: string | null;
+  copy?: string;
+  mediaType?: 'image' | 'video';
+  source?: 'upload' | 'huggingface';
 }
 
 export interface CalendarEvent {
@@ -59,9 +64,16 @@ export interface SocialPost {
   scheduledAt?: string;
   publishedAt?: string;
   createdAt: string;
+  assetId?: string | null;
+  mediaUrl?: string | null;
 }
 
-export type IntegrationConnectMode = 'demo' | 'oauth' | 'coming_soon' | 'disabled';
+export type IntegrationConnectMode =
+  | 'demo'
+  | 'oauth'
+  | 'coming_soon'
+  | 'disabled'
+  | 'unconfigured';
 
 export interface IntegrationProviderConfig {
   configured: boolean;
@@ -74,6 +86,8 @@ export interface IntegrationsConfig {
   configured: Record<string, boolean>;
   providers: Record<string, IntegrationProviderConfig>;
   environment: 'demo' | 'mixed' | 'production';
+  cloudinary?: boolean;
+  huggingface?: boolean;
 }
 
 export interface IntegrationStatus {

@@ -24,6 +24,8 @@ import {
   FileSignature,
   FlaskConical,
   Menu,
+  Sparkles,
+  Wand2,
 } from 'lucide-react';
 import { useAuth } from '../lib/useAuth';
 import AuthGuard from '../components/AuthGuard';
@@ -249,7 +251,7 @@ const Dashboard = () => {
               className="w-full flex items-center gap-3 px-5 py-3 text-slate-400 hover:text-emerald-600 transition-all font-semibold rounded-xl hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-50"
             >
               <Zap size={20} />
-              <span>{syncing ? 'Syncing...' : 'Sync API'}</span>
+              <span>{syncing ? 'Actualizando...' : 'Actualizar'}</span>
             </button>
             <button
               onClick={handleLogout}
@@ -315,11 +317,6 @@ const Dashboard = () => {
                 <button type="button" onClick={() => syncAll()} className="text-amber-900 underline text-xs self-start sm:self-auto">
                   Retry
                 </button>
-              </div>
-            )}
-            {apiOnline === true && (
-              <div className="mb-4 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
-                API connected — data synced
               </div>
             )}
             {activeTab === 'dashboard' && <DashboardView />}
@@ -518,6 +515,7 @@ const CampaignLauncher = memo(({ showToast, onOpenContract }: CampaignLauncherPr
     copy: string;
     scheduledAt?: string;
     platforms?: string[];
+    assetId?: string;
   }) => {
     if (!publishTarget) return;
     try {
@@ -772,10 +770,17 @@ interface AssetStudioProps {
 const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
   const [ratio, setRatio] = useState<'1:1' | '9:16' | '16:9'>('1:1');
   const [assetName, setAssetName] = useState('');
+  const [assetCopy, setAssetCopy] = useState('');
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isAiCopy, setIsAiCopy] = useState(false);
+  const [isAiImage, setIsAiImage] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const { assets } = useAppStore();
-  const { uploadAssetRemote, deleteAssetRemote } = useAgencyActions();
+  const { uploadAssetRemote, deleteAssetRemote, generateCopyRemote, generateImageRemote } =
+    useAgencyActions();
 
   const ratios = [
     { label: 'Start Post', value: '1:1' as const, size: 'w-64 h-64' },
@@ -783,19 +788,71 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
     { label: 'Start Banner', value: '16:9' as const, size: 'w-80 h-44' },
   ];
 
+  const handleFileChange = (file: File | null) => {
+    setSelectedFile(file);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(file ? URL.createObjectURL(file) : null);
+  };
+
+  const generateCopyWithAi = async () => {
+    if (!aiTopic.trim()) {
+      return showToast('Escribe un tema para el copy', 'error');
+    }
+    setIsAiCopy(true);
+    try {
+      const copy = await generateCopyRemote(aiTopic, 'Instagram', 'profesional');
+      setAssetCopy(copy);
+      if (!assetName.trim()) setAssetName(aiTopic.slice(0, 50));
+      showToast('Copy generado');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error generando copy';
+      showToast(msg, 'error');
+    } finally {
+      setIsAiCopy(false);
+    }
+  };
+
+  const generateImageWithAi = async () => {
+    if (!aiPrompt.trim()) {
+      return showToast('Escribe un prompt para la imagen', 'error');
+    }
+    setIsAiImage(true);
+    try {
+      const asset = await generateImageRemote(
+        aiPrompt,
+        assetName.trim() || `IA: ${aiPrompt.slice(0, 40)}`,
+        ratio,
+      );
+      showToast(`Imagen generada: ${asset.name}`);
+      setAiPrompt('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error generando imagen';
+      showToast(msg, 'error');
+    } finally {
+      setIsAiImage(false);
+    }
+  };
+
   const generateAsset = async () => {
     if (!assetName.trim()) {
       return showToast('Please name your asset', 'error');
     }
+    if (!selectedFile) {
+      return showToast('Selecciona una imagen o video', 'error');
+    }
 
     setIsGenerating(true);
     try {
-      await uploadAssetRemote(selectedFile, assetName, ratio);
+      await uploadAssetRemote(selectedFile, assetName, ratio, assetCopy);
       showToast(`Asset "${assetName}" saved`);
       setAssetName('');
+      setAssetCopy('');
       setSelectedFile(null);
-    } catch {
-      showToast('Failed to upload asset', 'error');
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload asset';
+      showToast(msg, 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -829,31 +886,90 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
             </button>
           ))}
         </div>
-        <div className="lg:col-span-3 bg-slate-50 rounded-2xl sm:rounded-[3rem] flex flex-col items-center justify-center p-6 sm:p-12 lg:p-20 min-h-[360px] sm:min-h-[500px] border-4 border-dashed border-slate-100">
+        <div className="lg:col-span-3 bg-slate-50 rounded-2xl sm:rounded-[3rem] flex flex-col items-center p-6 sm:p-12 lg:p-12 min-h-[360px] border-4 border-dashed border-slate-100 space-y-4 w-full">
+          <div className="w-full max-w-md space-y-3">
+            <input
+              type="text"
+              value={aiTopic}
+              onChange={(e) => setAiTopic(e.target.value)}
+              placeholder="Tema para generar el texto del post"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:border-fuchsia-500 focus:outline-none"
+              disabled={isAiCopy}
+            />
+            <button
+              type="button"
+              onClick={generateCopyWithAi}
+              disabled={isAiCopy}
+              className="w-full py-2.5 text-sm font-bold text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Sparkles size={16} />
+              {isAiCopy ? 'Generando copy...' : 'Generar copy con IA'}
+            </button>
+          </div>
+
+          <textarea
+            value={assetCopy}
+            onChange={(e) => setAssetCopy(e.target.value)}
+            placeholder="Copy del post (opcional — se usa al publicar)"
+            rows={3}
+            className="w-full max-w-md px-4 py-3 rounded-xl border border-slate-200 text-sm focus:border-cyan-500 focus:outline-none resize-none"
+            disabled={isGenerating}
+          />
+
           <input
             type="file"
             accept="image/*,video/*"
-            onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-            className="mb-4 w-full max-w-md text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-fuchsia-50 file:text-fuchsia-700 file:font-bold"
+            onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+            className="w-full max-w-md text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-fuchsia-50 file:text-fuchsia-700 file:font-bold"
             disabled={isGenerating}
           />
           <input
             type="text"
             value={assetName}
             onChange={(e) => setAssetName(e.target.value)}
-            placeholder="Asset name (e.g. Summer Banner 2026)"
-            className="mb-8 w-full max-w-md px-6 py-3 rounded-2xl border-2 border-slate-200 focus:border-cyan-500 focus:outline-none font-semibold text-center"
+            placeholder="Nombre del asset"
+            className="w-full max-w-md px-6 py-3 rounded-2xl border-2 border-slate-200 focus:border-cyan-500 focus:outline-none font-semibold text-center"
             disabled={isGenerating}
           />
+
           <div className={`bg-white rounded-3xl shadow-2xl flex items-center justify-center overflow-hidden transition-all duration-500 ${ratios.find(r => r.value === ratio)?.size || 'w-64 h-64'}`}>
-            <div className={`w-full h-full flex items-center justify-center ${isGenerating ? 'bg-gradient-to-br from-cyan-500 to-fuchsia-500 animate-pulse' : 'bg-gradient-to-br from-slate-100 to-slate-200'}`}>
-               <ImageIcon size={48} className="text-white drop-shadow-lg" />
-            </div>
+            {previewUrl ? (
+              selectedFile?.type.startsWith('video/') ? (
+                <video src={previewUrl} className="w-full h-full object-cover" controls />
+              ) : (
+                <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+              )
+            ) : (
+              <div className={`w-full h-full flex items-center justify-center ${isGenerating || isAiImage ? 'bg-gradient-to-br from-cyan-500 to-fuchsia-500 animate-pulse' : 'bg-gradient-to-br from-slate-100 to-slate-200'}`}>
+                <ImageIcon size={48} className="text-white drop-shadow-lg" />
+              </div>
+            )}
           </div>
+
+          <div className="w-full max-w-md space-y-3">
+            <input
+              type="text"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="Prompt para imagen con IA"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:border-cyan-500 focus:outline-none"
+              disabled={isAiImage}
+            />
+            <button
+              type="button"
+              onClick={generateImageWithAi}
+              disabled={isAiImage}
+              className="w-full py-2.5 text-sm font-bold text-cyan-700 bg-cyan-50 hover:bg-cyan-100 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Wand2 size={16} />
+              {isAiImage ? 'Generando imagen...' : 'Generar imagen con IA'}
+            </button>
+          </div>
+
           <button
             onClick={generateAsset}
-            disabled={isGenerating}
-            className="mt-12 px-10 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-cyan-500 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
+            disabled={isGenerating || !selectedFile}
+            className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-cyan-500 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
           >
             {isGenerating ? (
               <>
@@ -861,9 +977,9 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Uploading...
+                Subiendo...
               </>
-            ) : 'Upload asset'}
+            ) : 'Subir asset'}
           </button>
         </div>
       </div>
@@ -880,17 +996,28 @@ const AssetStudio = memo(({ showToast }: AssetStudioProps) => {
                 style={{ animationDelay: `${i * 100}ms` }}
               >
                 <div className={`${ratios.find(r => r.value === asset.ratio)?.size || 'w-full h-48'} mx-auto bg-gradient-to-br from-cyan-100 to-fuchsia-100 rounded-xl flex items-center justify-center mb-4 group-hover:scale-105 transition-transform overflow-hidden`}>
-                  {asset.url || asset.thumbnail ? (
-                    <img
-                      src={asset.url || asset.thumbnail}
-                      alt={asset.name}
-                      className="w-full h-full object-cover"
-                    />
+                  {asset.publicUrl || asset.url || asset.thumbnail ? (
+                    asset.mediaType === 'video' ? (
+                      <video
+                        src={asset.publicUrl || asset.url || asset.thumbnail}
+                        className="w-full h-full object-cover"
+                        muted
+                      />
+                    ) : (
+                      <img
+                        src={asset.publicUrl || asset.url || asset.thumbnail}
+                        alt={asset.name}
+                        className="w-full h-full object-cover"
+                      />
+                    )
                   ) : (
                     <ImageIcon size={32} className="text-slate-400" />
                   )}
                 </div>
-                <h4 className="font-black text-slate-900 mb-2">{asset.name}</h4>
+                <h4 className="font-black text-slate-900 mb-1">{asset.name}</h4>
+                {asset.copy && (
+                  <p className="text-xs text-slate-500 mb-2 line-clamp-2">{asset.copy}</p>
+                )}
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-slate-500 font-semibold">Ratio: {asset.ratio}</span>
                   <button

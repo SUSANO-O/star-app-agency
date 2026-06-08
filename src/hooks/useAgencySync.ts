@@ -14,6 +14,8 @@ import {
   fetchIntegrationsStatus,
   fetchSocialPosts,
   processScheduledPosts,
+  generateCopyApi,
+  generateImageApi,
   publishCampaignApi,
   updateCampaignApi,
   uploadAssetApi,
@@ -37,7 +39,7 @@ export function useAgencySync() {
       const online = await checkAgencyHealth();
       setApiOnline(online);
       if (!online) {
-        setSyncError('Agency API unavailable. Run: npm run dev:all');
+        setSyncError('No se pudo conectar. Intenta de nuevo.');
         return false;
       }
 
@@ -113,7 +115,7 @@ export function useAgencyActions() {
 
   const publishCampaignRemote = async (
     id: string,
-    body: { copy?: string; scheduledAt?: string; platforms?: string[] },
+    body: { copy?: string; scheduledAt?: string; platforms?: string[]; assetId?: string },
   ) => {
     const result = await publishCampaignApi(id, body);
     store.updateCampaign(id, result.campaign);
@@ -141,15 +143,26 @@ export function useAgencyActions() {
     store.deleteCalendarEvent(id);
   };
 
-  const uploadAssetRemote = async (file: File | null, name: string, ratio: string) => {
-    try {
-      const asset = await uploadAssetApi(file, name, ratio);
-      store.addAssetFromApi(asset);
-      return asset;
-    } catch {
-      store.addAsset({ name, ratio: ratio as '1:1' | '9:16' | '16:9' });
-      return null;
-    }
+  const uploadAssetRemote = async (
+    file: File,
+    name: string,
+    ratio: string,
+    copy?: string,
+  ) => {
+    const asset = await uploadAssetApi(file, name, ratio, copy);
+    store.addAssetFromApi(asset);
+    return asset;
+  };
+
+  const generateCopyRemote = async (topic: string, platform?: string, tone?: string) => {
+    const { copy } = await generateCopyApi({ topic, platform, tone });
+    return copy;
+  };
+
+  const generateImageRemote = async (prompt: string, name?: string, ratio?: string) => {
+    const { asset } = await generateImageApi({ prompt, name, ratio });
+    store.addAssetFromApi(asset);
+    return asset;
   };
 
   const deleteAssetRemote = async (id: string) => {
@@ -170,5 +183,7 @@ export function useAgencyActions() {
     deleteCalendarEventRemote,
     uploadAssetRemote,
     deleteAssetRemote,
+    generateCopyRemote,
+    generateImageRemote,
   };
 }

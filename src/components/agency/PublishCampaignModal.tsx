@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Calendar, FlaskConical, Loader2, Send, X } from 'lucide-react';
-import { CHANNEL_INTEGRATION_KEY, CHANNEL_TO_PLATFORM } from '../../lib/agencyTypes';
+import {
+  CHANNEL_INTEGRATION_KEY,
+  CHANNEL_TO_PLATFORM,
+} from '../../lib/agencyTypes';
 import type { Campaign, IntegrationProvider } from '../../lib/agencyTypes';
 import { useAppStore } from '../../lib/store';
+
+const DEMO_ONLY_PROVIDERS = new Set<IntegrationProvider>(['linkedin', 'x']);
 
 interface PublishCampaignModalProps {
   campaign: Campaign;
@@ -11,6 +16,7 @@ interface PublishCampaignModalProps {
     copy: string;
     scheduledAt?: string;
     platforms?: string[];
+    assetId?: string;
   }) => Promise<void>;
 }
 
@@ -22,26 +28,32 @@ function integrationKeyForChannel(channel: string): IntegrationProvider | 'meta'
 
 export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCampaignModalProps) {
   const integrations = useAppStore((s) => s.integrations);
+  const assets = useAppStore((s) => s.assets);
   const [copy, setCopy] = useState(
     campaign.copy || `🚀 ${campaign.name}\n\nObjective: ${campaign.objective}\n\n#Agency360 #Marketing`,
   );
   const [schedule, setSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
+  const [assetId, setAssetId] = useState('');
   const [publishing, setPublishing] = useState(false);
 
   const platforms = campaign.channels.map((c) => CHANNEL_TO_PLATFORM[c] || c.toLowerCase());
+  const needsImage = platforms.includes('instagram');
+  const assetsWithMedia = assets.filter((a) => a.publicUrl || a.url);
 
   const publishContext = useMemo(() => {
     const keys = [...new Set(campaign.channels.map(integrationKeyForChannel))];
     const related = integrations.filter((i) => keys.includes(i.provider as IntegrationProvider));
-    const hasDemo = related.some((i) => i.connected && i.mode === 'demo');
-    const hasLive = related.some((i) => i.connected && i.mode === 'live');
+    const demoRelated = related.filter(
+      (i) => i.connected && i.mode === 'demo' && DEMO_ONLY_PROVIDERS.has(i.provider),
+    );
+    const hasDemo = demoRelated.length > 0;
     const missing = keys.filter(
       (k) => !related.some((i) => i.provider === k && i.connected),
     );
     const googleStatus = integrations.find((i) => i.provider === 'google');
 
-    return { hasDemo, hasLive, missing, googleStatus, keys };
+    return { hasDemo, missing, googleStatus };
   }, [campaign.channels, integrations]);
 
   const handlePublish = async () => {
@@ -50,6 +62,7 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
       await onPublish({
         copy,
         platforms,
+        assetId: assetId || undefined,
         scheduledAt: schedule && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
       });
       onClose();
@@ -92,37 +105,21 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
           {publishContext.hasDemo && (
             <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <FlaskConical size={18} className="shrink-0 mt-0.5" />
-              <p>
-                <strong>Demo mode:</strong> at least one channel uses a simulated connection.
-                Posts will not reach the real social API.
-              </p>
+              <p>LinkedIn y X publicarán en modo de prueba.</p>
             </div>
           )}
 
-          {publishContext.hasLive && !publishContext.hasDemo && (
-            <div className="flex gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-              <Send size={18} className="shrink-0 mt-0.5" />
-              <p>
-                <strong>OAuth mode:</strong> connected integrations will use real API tokens.
-                Facebook posts go live; Instagram may require an image asset.
-              </p>
+          {needsImage && !assetId && (
+            <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+              <p>Instagram requiere un asset con imagen (súbelo en Asset Studio).</p>
             </div>
           )}
 
-          {schedule && publishContext.googleStatus?.connected && (
-            <div
-              className={`flex gap-3 rounded-xl border px-4 py-3 text-sm ${
-                publishContext.googleStatus.mode === 'demo'
-                  ? 'border-amber-200 bg-amber-50 text-amber-900'
-                  : 'border-blue-200 bg-blue-50 text-blue-900'
-              }`}
-            >
+          {schedule && !publishContext.googleStatus?.connected && (
+            <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <Calendar size={18} className="shrink-0 mt-0.5" />
-              <p>
-                {publishContext.googleStatus.mode === 'demo'
-                  ? 'Calendar: demo mode — scheduled events stay local only.'
-                  : 'Calendar: OAuth active — events will sync to Google Calendar when scheduled.'}
-              </p>
+              <p>Conecta tu calendario para programar publicaciones.</p>
             </div>
           )}
 
@@ -141,6 +138,32 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
               ))}
             </div>
           </div>
+
+          {assetsWithMedia.length > 0 && (
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Creative asset {needsImage ? '(required for Instagram)' : '(optional)'}
+              </label>
+              <select
+                value={assetId}
+                onChange={(e) => {
+                  setAssetId(e.target.value);
+                  const asset = assetsWithMedia.find((a) => a.id === e.target.value);
+                  if (asset?.copy && !campaign.copy) {
+                    setCopy(asset.copy);
+                  }
+                }}
+                className="mt-2 w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-fuchsia-500 outline-none"
+              >
+                <option value="">— Sin asset —</option>
+                {assetsWithMedia.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.ratio})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -189,7 +212,12 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
           <button
             type="button"
             onClick={handlePublish}
-            disabled={publishing || !copy.trim() || (schedule && !scheduledAt)}
+            disabled={
+              publishing ||
+              !copy.trim() ||
+              (schedule && !scheduledAt) ||
+              (needsImage && !assetId)
+            }
             className="flex-1 py-3 font-bold text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {publishing ? (
@@ -197,7 +225,7 @@ export function PublishCampaignModal({ campaign, onClose, onPublish }: PublishCa
             ) : (
               <Send size={18} />
             )}
-            {schedule ? 'Schedule' : publishContext.hasDemo ? 'Publish (demo)' : 'Publish (live)'}
+            {schedule ? 'Programar' : 'Publicar'}
           </button>
         </div>
       </div>

@@ -22,7 +22,6 @@ import type {
   IntegrationConnectMode,
   IntegrationProvider,
   IntegrationProviderConfig,
-  IntegrationsConfig,
   IntegrationStatus,
 } from '../../lib/agencyTypes';
 import { useAppStore } from '../../lib/store';
@@ -55,49 +54,39 @@ const PROVIDERS: {
     id: 'x',
     icon: Twitter,
     color: 'text-slate-800 bg-slate-100',
-    description: 'Publish on X (Twitter). Requires developer API access.',
+    description: 'Publica en X (Twitter).',
   },
 ];
-
-const ENV_BANNER: Record<IntegrationsConfig['environment'], { label: string; className: string }> =
-  {
-    demo: {
-      label: 'Demo environment — integrations without OAuth keys use simulated connections.',
-      className: 'bg-amber-50 border-amber-200 text-amber-800',
-    },
-    mixed: {
-      label: 'Mixed environment — some integrations use real OAuth, others are demo or coming soon.',
-      className: 'bg-blue-50 border-blue-200 text-blue-800',
-    },
-    production: {
-      label: 'Production environment — OAuth keys configured for all enabled integrations.',
-      className: 'bg-emerald-50 border-emerald-200 text-emerald-800',
-    },
-  };
 
 function getDisconnectedBadge(connectMode: IntegrationConnectMode) {
   switch (connectMode) {
     case 'oauth':
       return {
-        label: 'OAuth ready',
+        label: 'Disponible',
         className: 'text-blue-600 bg-blue-50',
-        hint: 'Real authorization window will open (Google/Meta account).',
+        hint: '',
       };
     case 'demo':
       return {
-        label: 'Demo mode',
+        label: 'Disponible',
         className: 'text-amber-700 bg-amber-50',
-        hint: 'No OAuth keys on server — connection is simulated for testing.',
+        hint: '',
+      };
+    case 'unconfigured':
+      return {
+        label: 'No disponible',
+        className: 'text-slate-400 bg-slate-100',
+        hint: '',
       };
     case 'coming_soon':
       return {
-        label: 'Coming soon',
+        label: 'Próximamente',
         className: 'text-violet-700 bg-violet-50',
-        hint: 'This integration is not available yet.',
+        hint: '',
       };
     default:
       return {
-        label: 'Unavailable',
+        label: 'No disponible',
         className: 'text-slate-400 bg-slate-100',
         hint: '',
       };
@@ -107,15 +96,15 @@ function getDisconnectedBadge(connectMode: IntegrationConnectMode) {
 function getConnectedBadge(mode: IntegrationStatus['mode']) {
   if (mode === 'demo') {
     return {
-      label: 'Connected · simulation',
+      label: 'Conectado',
       className: 'text-amber-700 bg-amber-50',
-      hint: 'Posts and calendar sync are not sent to the real API.',
+      hint: '',
     };
   }
   return {
-    label: 'Connected · OAuth',
+    label: 'Conectado',
     className: 'text-emerald-700 bg-emerald-50',
-    hint: 'Real authorization completed. API calls use live tokens.',
+    hint: '',
   };
 }
 
@@ -131,8 +120,6 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
   const [providerConfig, setProviderConfig] = useState<Record<string, IntegrationProviderConfig>>(
     {},
   );
-  const [environment, setEnvironment] = useState<IntegrationsConfig['environment']>('mixed');
-
   const refresh = useCallback(async () => {
     try {
       const [status, config] = await Promise.all([
@@ -142,20 +129,37 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
       setIntegrations(status);
       setEnabledProviders(config.enabled);
       setProviderConfig(config.providers);
-      setEnvironment(config.environment);
     } catch {
       onToast('Could not load integration status', 'error');
     }
   }, [setIntegrations, onToast]);
 
   useEffect(() => {
-    if (integrations.length === 0) refresh();
-  }, [integrations.length, refresh]);
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'agency-integration-connected') {
+        refresh();
+        onToast(`${PLATFORM_LABELS[event.data.provider as IntegrationProvider] ?? 'Integración'} conectada`, 'success');
+      }
+    };
+    const onFocus = () => refresh();
+
+    window.addEventListener('message', onMessage);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refresh, onToast]);
 
   const connect = async (provider: IntegrationProvider) => {
     const connectMode = providerConfig[provider]?.connectMode;
-    if (connectMode === 'coming_soon') {
-      onToast(`${PLATFORM_LABELS[provider]} is coming soon`, 'warning');
+    if (connectMode === 'unconfigured' || connectMode === 'coming_soon') {
+      onToast(`${PLATFORM_LABELS[provider]} no está disponible por ahora`, 'warning');
       return;
     }
 
@@ -163,24 +167,26 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
     try {
       const { url, mode } = await getIntegrationConnectUrl(provider);
       if (mode === 'demo') {
-        onToast(
-          `Connecting ${PLATFORM_LABELS[provider]} in demo mode (simulated — no real API)`,
-          'warning',
-        );
         window.location.href = url;
       } else {
-        window.open(url, '_blank', 'noopener,noreferrer');
-        onToast(
-          `Complete ${PLATFORM_LABELS[provider]} OAuth in the new window (real authorization)`,
-          'warning',
+        const popup = window.open(
+          url,
+          'agency_oauth',
+          'width=520,height=720,scrollbars=yes,resizable=yes',
         );
+        if (!popup) {
+          onToast('Permite ventanas emergentes del navegador para conectar con OAuth', 'error');
+          return;
+        }
+        onToast(`Completa la autorización de ${PLATFORM_LABELS[provider]} en la ventana emergente`, 'warning');
       }
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { mode?: string } } };
-      if (axiosErr.response?.data?.mode === 'coming_soon') {
-        onToast(`${PLATFORM_LABELS[provider]} is coming soon`, 'warning');
+      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+      const detail = axiosErr.response?.data?.error;
+      if (!axiosErr.response) {
+        onToast('El servidor API no responde — ejecuta npm run dev:all', 'error');
       } else {
-        onToast(`Failed to connect ${PLATFORM_LABELS[provider]}`, 'error');
+        onToast(detail || `No se pudo conectar ${PLATFORM_LABELS[provider]}`, 'error');
       }
     } finally {
       setLoading(null);
@@ -203,23 +209,8 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
   const getStatus = (provider: IntegrationProvider): IntegrationStatus | undefined =>
     integrations.find((i) => i.provider === provider);
 
-  const envBanner = ENV_BANNER[environment];
-
   return (
     <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-500 px-1">
-      <div>
-        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter">
-          Integrations
-        </h2>
-        <p className="text-slate-500 mt-2 text-sm sm:text-base">
-          Connect your accounts to publish campaigns and sync the calendar.
-        </p>
-      </div>
-
-      <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${envBanner.className}`}>
-        {envBanner.label}
-      </div>
-
       <div className="space-y-4">
         {PROVIDERS.filter(({ id }) => enabledProviders.includes(id)).map(
           ({ id, icon: Icon, color, description }) => {
@@ -231,6 +222,7 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
               ? getConnectedBadge(status?.mode ?? 'disconnected')
               : getDisconnectedBadge(connectMode);
             const isComingSoon = connectMode === 'coming_soon';
+            const isUnconfigured = connectMode === 'unconfigured';
 
             return (
               <div
@@ -263,7 +255,6 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
                     </span>
                   </div>
                   <p className="text-sm text-slate-500 mt-1">{description}</p>
-                  <p className="text-xs text-slate-400 mt-1">{badge.hint}</p>
                   {status?.accountName && connected && (
                     <p className="text-xs text-slate-500 mt-1 font-medium">{status.accountName}</p>
                   )}
@@ -287,7 +278,7 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
                     <button
                       type="button"
                       onClick={() => connect(id)}
-                      disabled={isLoading || isComingSoon}
+                      disabled={isLoading || isComingSoon || isUnconfigured}
                       className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold text-white bg-slate-900 hover:bg-fuchsia-600 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isLoading ? (
@@ -299,11 +290,7 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
                       ) : (
                         <ExternalLink size={16} />
                       )}
-                      {isComingSoon
-                        ? 'Coming soon'
-                        : connectMode === 'demo'
-                          ? 'Connect (demo)'
-                          : 'Connect (OAuth)'}
+                      {isComingSoon || isUnconfigured ? 'No disponible' : 'Conectar'}
                     </button>
                   )}
                 </div>
@@ -312,14 +299,6 @@ export function IntegrationsPanel({ onToast }: IntegrationsPanelProps) {
           },
         )}
       </div>
-
-      <p className="text-xs text-slate-400 text-center px-2 leading-relaxed">
-        <strong className="text-slate-500">Demo</strong> = simulated connection without OAuth keys.{' '}
-        <strong className="text-slate-500">OAuth</strong> = real authorization with keys in{' '}
-        <code className="text-slate-500">server/.env</code>.{' '}
-        <strong className="text-slate-500">Coming soon</strong> = LinkedIn and X until API keys are
-        added. Contract demo at <code className="text-slate-500">/demo/contrato</code> is separate.
-      </p>
     </div>
   );
 }

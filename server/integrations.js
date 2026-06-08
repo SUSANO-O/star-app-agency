@@ -1,5 +1,6 @@
 /**
  * OAuth token exchange and real API calls for agency integrations.
+ * Demo/simulation ONLY for LinkedIn and X.
  */
 import { google } from 'googleapis';
 import { randomUUID } from 'crypto';
@@ -11,15 +12,18 @@ const DEMO_BASE_URLS = {
   x: 'https://x.com/i/status/',
 };
 
-export const COMING_SOON_PROVIDERS = new Set(['linkedin', 'x']);
+/** Only these providers may use demo/simulated connect & publish */
+export const DEMO_ONLY_PROVIDERS = new Set(['linkedin', 'x']);
 
 export function getProviderConnectMode(provider, { hasLiveCredentials, isEnabled }) {
   if (!isEnabled(provider)) return 'disabled';
-  if (COMING_SOON_PROVIDERS.has(provider) && !hasLiveCredentials(provider)) {
-    return 'coming_soon';
+
+  if (DEMO_ONLY_PROVIDERS.has(provider)) {
+    return hasLiveCredentials(provider) ? 'oauth' : 'demo';
   }
-  if (hasLiveCredentials(provider)) return 'oauth';
-  return 'demo';
+
+  // Google & Meta: OAuth real only — no demo
+  return hasLiveCredentials(provider) ? 'oauth' : 'unconfigured';
 }
 
 export function buildIntegrationsConfig({ enabled, hasLiveCredentials }) {
@@ -37,32 +41,40 @@ export function buildIntegrationsConfig({ enabled, hasLiveCredentials }) {
       configured: isConfigured,
       connectMode,
       enabled: enabled.includes(provider),
+      demoAllowed: DEMO_ONLY_PROVIDERS.has(provider),
     };
   }
 
-  const enabledConfigured = enabled.filter((p) => hasLiveCredentials(p));
-  let environment = 'demo';
-  if (enabledConfigured.length === enabled.length && enabled.length > 0) {
+  const liveProviders = ['google', 'meta'].filter(
+    (p) => enabled.includes(p) && hasLiveCredentials(p),
+  );
+  const demoProviders = ['linkedin', 'x'].filter((p) => enabled.includes(p));
+
+  let environment = 'mixed';
+  if (liveProviders.length >= 1 && demoProviders.every((p) => !hasLiveCredentials(p))) {
     environment = 'production';
-  } else if (enabledConfigured.length > 0) {
-    environment = 'mixed';
   }
 
-  return { enabled, configured, providers, environment };
+  return {
+    enabled,
+    configured,
+    providers,
+    environment,
+    cloudinary: Boolean(
+      process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_UPLOAD_PRESET,
+    ),
+    huggingface: Boolean(process.env.HUGGINGFACE_API_TOKEN || process.env.HF_API_TOKEN),
+  };
 }
 
 function simulatePublish(platform, integration, reason) {
   const postId = randomUUID().slice(0, 12);
-  const mode = integration?.mode || 'demo';
   return {
     status: 'published',
     simulated: true,
     externalPostId: postId,
     externalUrl: `${DEMO_BASE_URLS[platform] || 'https://example.com/'}${postId}`,
-    message:
-      mode === 'demo'
-        ? `Simulación: publicado en ${platform} (sin API real — modo demo)`
-        : reason || `Simulación: publicado en ${platform} (API no disponible)`,
+    message: reason || `Simulación: publicado en ${platform} (demo — LinkedIn/X pendiente de API completa)`,
   };
 }
 
@@ -115,19 +127,23 @@ async function refreshGoogleAccessToken(integration, { clientId, clientSecret })
 
 export async function syncGoogleCalendarEvent(integration, event, config) {
   if (!integration?.connected) {
-    return { googleEventId: null, syncStatus: 'local' };
+    return {
+      googleEventId: null,
+      syncStatus: 'local',
+      message: 'Conecta Google Calendar en Integraciones',
+    };
   }
 
   if (integration.mode === 'demo' || integration.accessToken === 'demo-token') {
     return {
-      googleEventId: `demo_gcal_${randomUUID().slice(0, 8)}`,
-      syncStatus: 'demo',
-      message: 'Evento guardado localmente (modo demo — no se sincroniza con Google Calendar)',
+      googleEventId: null,
+      syncStatus: 'failed',
+      message: 'Google Calendar requiere conexión OAuth real — reconecta en Integraciones',
     };
   }
 
   if (!integration.refreshToken && !integration.accessToken) {
-    return { googleEventId: null, syncStatus: 'local' };
+    return { googleEventId: null, syncStatus: 'failed', message: 'Token de Google no disponible' };
   }
 
   try {
@@ -158,28 +174,22 @@ export async function syncGoogleCalendarEvent(integration, event, config) {
       requestBody: {
         summary: event.title,
         description: event.description || '',
-        start: {
-          dateTime: event.startAt,
-          timeZone: 'UTC',
-        },
-        end: {
-          dateTime: event.endAt || event.startAt,
-          timeZone: 'UTC',
-        },
+        start: { dateTime: event.startAt, timeZone: 'UTC' },
+        end: { dateTime: event.endAt || event.startAt, timeZone: 'UTC' },
       },
     });
 
     return {
       googleEventId: result.data.id,
       syncStatus: 'synced',
-      message: 'Evento sincronizado con Google Calendar (API real)',
+      message: 'Sincronizado con Google Calendar',
     };
   } catch (err) {
     console.error('Google Calendar sync error:', err.message);
     return {
       googleEventId: null,
       syncStatus: 'failed',
-      message: `No se pudo sincronizar con Google Calendar: ${err.message}`,
+      message: `Error Google Calendar: ${err.message}`,
     };
   }
 }
@@ -249,14 +259,37 @@ export async function exchangeMetaTokens(code, config) {
   };
 }
 
-async function publishToFacebook(copy, integration, version) {
-  const res = await fetch(`https://graph.facebook.com/${version}/${integration.pageId}/feed`, {
+async function publishToFacebook(copy, integration, version, mediaUrl) {
+  const token = integration.pageAccessToken;
+  const pageId = integration.pageId;
+
+  if (mediaUrl) {
+    const res = await fetch(`https://graph.facebook.com/${version}/${pageId}/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: mediaUrl,
+        caption: copy,
+        access_token: token,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error?.message || 'Facebook photo publish failed');
+    }
+    return {
+      status: 'published',
+      simulated: false,
+      externalPostId: data.id || data.post_id,
+      externalUrl: `https://www.facebook.com/${data.id || pageId}`,
+      message: 'Publicado en Facebook con imagen (API real)',
+    };
+  }
+
+  const res = await fetch(`https://graph.facebook.com/${version}/${pageId}/feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message: copy,
-      access_token: integration.pageAccessToken,
-    }),
+    body: JSON.stringify({ message: copy, access_token: token }),
   });
   const data = await res.json();
   if (!res.ok || data.error) {
@@ -271,77 +304,114 @@ async function publishToFacebook(copy, integration, version) {
   };
 }
 
-async function publishToInstagram(copy, integration, version) {
+async function publishToInstagram(copy, integration, version, mediaUrl, mediaType) {
   if (!integration.igBusinessId) {
     return {
       status: 'failed',
-      simulated: true,
-      error: 'No hay cuenta de Instagram Business vinculada a la Page de Facebook',
-      message:
-        'Instagram requiere una cuenta Business vinculada y un archivo de imagen o video',
+      error: 'No hay cuenta Instagram Business vinculada a tu Facebook Page',
+      message: 'Vincula IG Business a tu Page en Meta Business Suite',
     };
   }
+
+  if (!mediaUrl) {
+    return {
+      status: 'failed',
+      error: 'Instagram requiere imagen o video',
+      message: 'Sube un asset en Asset Studio (Cloudinary) antes de publicar en Instagram',
+    };
+  }
+
+  const isVideo = mediaType === 'video';
+  const containerBody = {
+    caption: copy,
+    access_token: integration.pageAccessToken,
+    ...(isVideo ? { media_type: 'REELS', video_url: mediaUrl } : { image_url: mediaUrl }),
+  };
+
+  const createRes = await fetch(
+    `https://graph.facebook.com/${version}/${integration.igBusinessId}/media`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(containerBody),
+    },
+  );
+  const createData = await createRes.json();
+  if (!createRes.ok || createData.error) {
+    throw new Error(createData.error?.message || 'Instagram media container failed');
+  }
+
+  const publishRes = await fetch(
+    `https://graph.facebook.com/${version}/${integration.igBusinessId}/media_publish`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        creation_id: createData.id,
+        access_token: integration.pageAccessToken,
+      }),
+    },
+  );
+  const publishData = await publishRes.json();
+  if (!publishRes.ok || publishData.error) {
+    throw new Error(publishData.error?.message || 'Instagram publish failed');
+  }
+
   return {
-    status: 'failed',
-    simulated: true,
-    error: 'Instagram requiere imagen o video para publicar',
-    message:
-      'Instagram API real requiere un asset de imagen o video — solo texto no está soportado aún',
+    status: 'published',
+    simulated: false,
+    externalPostId: publishData.id,
+    externalUrl: `https://www.instagram.com/p/${publishData.id}`,
+    message: 'Publicado en Instagram (API real)',
   };
 }
 
-export async function publishToPlatform(platform, { copy, integration }, metaVersion) {
+export async function publishToPlatform(
+  platform,
+  { copy, integration, mediaUrl, mediaType },
+  metaVersion,
+) {
   if (!integration?.connected) {
     return {
       status: 'failed',
-      error: `Conecta la integración de ${platform} primero`,
-      message: `Simulación: conecta ${platform} en Integraciones para publicación real`,
+      error: `Conecta ${platform === 'facebook' || platform === 'instagram' ? 'Meta' : platform} en Integraciones`,
     };
   }
 
+  // LinkedIn & X — always simulated until full API
+  if (platform === 'linkedin' || platform === 'x') {
+    return simulatePublish(
+      platform,
+      integration,
+      `${platform === 'linkedin' ? 'LinkedIn' : 'X'}: publicación simulada (próximamente API real)`,
+    );
+  }
+
   if (integration.mode === 'demo' || integration.accessToken === 'demo-token') {
-    return simulatePublish(platform, integration);
+    return {
+      status: 'failed',
+      error: `${platform} requiere OAuth real — no se permite modo demo`,
+    };
   }
 
   if ((platform === 'facebook' || platform === 'instagram') && integration.pageAccessToken) {
     try {
       if (platform === 'facebook' && integration.pageId) {
-        return await publishToFacebook(copy, integration, metaVersion);
+        return await publishToFacebook(copy, integration, metaVersion, mediaUrl);
       }
       if (platform === 'instagram') {
-        return await publishToInstagram(copy, integration, metaVersion);
+        return await publishToInstagram(copy, integration, metaVersion, mediaUrl, mediaType);
       }
     } catch (err) {
       console.error(`Meta publish error (${platform}):`, err.message);
-      return {
-        status: 'failed',
-        error: err.message,
-        message: `Error al publicar en ${platform}: ${err.message}`,
-      };
+      return { status: 'failed', error: err.message, message: err.message };
     }
   }
 
-  if (platform === 'linkedin' && integration.accessToken) {
-    return simulatePublish(
-      platform,
-      integration,
-      'LinkedIn OAuth pendiente de implementación completa — publicación simulada',
-    );
-  }
-
-  if (platform === 'x') {
-    return simulatePublish(
-      platform,
-      integration,
-      'X (Twitter) próximamente — publicación simulada',
-    );
-  }
-
-  return simulatePublish(
-    platform,
-    integration,
-    `Publicación simulada en ${platform} (OAuth activo, API no configurada)`,
-  );
+  return {
+    status: 'failed',
+    error: `No se pudo publicar en ${platform}`,
+  };
 }
 
 export async function exchangeLinkedInTokens(code, config) {

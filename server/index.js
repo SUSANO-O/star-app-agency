@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
 import {
   buildIntegrationsConfig,
+  DEMO_ONLY_PROVIDERS,
   exchangeGoogleTokens,
   exchangeLinkedInTokens,
   exchangeMetaTokens,
@@ -19,6 +20,12 @@ import {
   publishToPlatform,
   syncGoogleCalendarEvent,
 } from './integrations.js';
+import { isCloudinaryConfigured, resolveAssetMediaUrl, uploadToCloudinary } from './cloudinary.js';
+import {
+  generateImage,
+  generateSocialCopy,
+  isHuggingFaceConfigured,
+} from './huggingface.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -30,8 +37,7 @@ const UPLOADS_DIR = path.join(__dirname, 'data', 'uploads');
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const GOOGLE_REDIRECT_URI =
-  process.env.GOOGLE_REDIRECT_URI ||
-  `http://localhost:${PORT}/api/v1/agency/integrations/google/callback/`;
+  process.env.GOOGLE_REDIRECT_URI || `${FRONTEND_URL}/integrations/callback`;
 
 const META_APP_ID = process.env.META_APP_ID || '';
 const META_APP_SECRET = process.env.META_APP_SECRET || '';
@@ -176,13 +182,20 @@ function providerConnectMode(provider) {
   });
 }
 
-const storage = multer.diskStorage({
-  destination: UPLOADS_DIR,
-  filename: (_req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`);
-  },
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
 });
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+
+function resolvePublishMedia(user, assetId) {
+  if (!assetId) return { mediaUrl: null, mediaType: 'image' };
+  const asset = user.assets.find((a) => a.id === assetId);
+  return {
+    mediaUrl: resolveAssetMediaUrl(asset),
+    mediaType: asset?.mediaType || 'image',
+    asset,
+  };
+}
 
 const app = express();
 app.use(
@@ -274,9 +287,15 @@ app.get('/api/v1/agency/integrations/:provider/connect/', (req, res) => {
     return res.json({ url, mode: 'oauth' });
   }
 
-  // Demo connect — solo si no hay credenciales live
-  const demoUrl = `${FRONTEND_URL}/integrations/callback?provider=${provider}&code=demo&state=${state}`;
-  res.json({ url: demoUrl, mode: 'demo' });
+  if (DEMO_ONLY_PROVIDERS.has(provider)) {
+    const demoUrl = `${FRONTEND_URL}/integrations/callback?provider=${provider}&code=demo&state=${state}`;
+    return res.json({ url: demoUrl, mode: 'demo' });
+  }
+
+  return res.status(503).json({
+    error: `Configura las claves OAuth de ${provider} en server/.env`,
+    mode: 'unconfigured',
+  });
 });
 
 app.post('/api/v1/agency/integrations/:provider/callback/', async (req, res) => {
@@ -295,6 +314,12 @@ app.post('/api/v1/agency/integrations/:provider/callback/', async (req, res) => 
 
   try {
     if (code === 'demo') {
+      if (!DEMO_ONLY_PROVIDERS.has(provider)) {
+        return res.status(400).json({
+          success: false,
+          error: `${names[provider]} no permite modo demo — usa OAuth real`,
+        });
+      }
       user.integrations[provider] = {
         connected: true,
         mode: 'demo',
@@ -339,15 +364,20 @@ app.post('/api/v1/agency/integrations/:provider/callback/', async (req, res) => 
         accountName: tokens.accountName,
         connectedAt: new Date().toISOString(),
       };
-    } else {
+    } else if (provider === 'x' && hasLiveCredentials('x')) {
       user.integrations[provider] = {
         connected: true,
         mode: 'live',
         accessToken: code,
         refreshToken: null,
-        accountName: names[provider] || provider,
+        accountName: names[provider],
         connectedAt: new Date().toISOString(),
       };
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: `${names[provider]} requiere OAuth configurado en server/.env`,
+      });
     }
 
     saveDb(db);
@@ -445,12 +475,19 @@ app.post('/api/v1/agency/campaigns/:id/publish/', async (req, res) => {
   const campaign = user.campaigns.find((c) => c.id === req.params.id);
   if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' });
 
-  const { copy, scheduledAt, platforms } = req.body;
+  const { copy, scheduledAt, platforms, assetId } = req.body;
   const copyText = copy || campaign.copy || `Campaña: ${campaign.name}`;
   const targetPlatforms =
     platforms || campaign.channels.map((c) => platformKey(c));
+  const { mediaUrl, mediaType } = resolvePublishMedia(user, assetId);
   const results = {};
   const posts = [];
+
+  if (targetPlatforms.includes('instagram') && !mediaUrl) {
+    return res.status(400).json({
+      error: 'Instagram requiere un asset con imagen/video (sube en Asset Studio)',
+    });
+  }
 
   for (const platform of targetPlatforms) {
     const integrationKey =
@@ -475,6 +512,9 @@ app.post('/api/v1/agency/campaigns/:id/publish/', async (req, res) => {
         content: copyText,
         status: 'scheduled',
         scheduledAt,
+        assetId: assetId || null,
+        mediaUrl: mediaUrl || null,
+        mediaType: mediaType || null,
         createdAt: new Date().toISOString(),
       };
       user.socialPosts.push(post);
@@ -503,7 +543,7 @@ app.post('/api/v1/agency/campaigns/:id/publish/', async (req, res) => {
     } else {
       const pub = await publishToPlatform(
         platform,
-        { copy: copyText, integration },
+        { copy: copyText, integration, mediaUrl, mediaType },
         META_GRAPH_API_VERSION,
       );
       const post = {
@@ -514,6 +554,8 @@ app.post('/api/v1/agency/campaigns/:id/publish/', async (req, res) => {
         status: pub.status,
         externalPostId: pub.externalPostId,
         externalUrl: pub.externalUrl,
+        assetId: assetId || null,
+        mediaUrl: mediaUrl || null,
         publishedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       };
@@ -596,25 +638,108 @@ app.get('/api/v1/agency/assets/', (req, res) => {
   res.json(user.assets);
 });
 
-app.post('/api/v1/agency/assets/upload/', upload.single('file'), (req, res) => {
+app.post('/api/v1/agency/assets/upload/', upload.single('file'), async (req, res) => {
   const db = loadDb();
   const user = getUserData(db, getUserId(req));
-  const asset = {
-    id: randomUUID(),
-    name: req.body.name || req.file?.originalname || 'Asset',
-    ratio: req.body.ratio || '1:1',
-    createdAt: new Date().toISOString(),
-    url: req.file ? `/uploads/${req.file.filename}` : null,
-    thumbnail: req.file ? `/uploads/${req.file.filename}` : undefined,
-  };
-  user.assets.push(asset);
-  addActivity(user, {
-    type: 'Asset',
-    title: `Nuevo asset: ${asset.name}`,
-    color: 'bg-cyan-500',
-  });
-  saveDb(db);
-  res.status(201).json(asset);
+
+  try {
+    let publicUrl = null;
+    let publicId = null;
+    let mediaType = 'image';
+
+    if (req.file) {
+      if (!isCloudinaryConfigured()) {
+        return res.status(503).json({
+          error: 'Configura CLOUDINARY_CLOUD_NAME y CLOUDINARY_UPLOAD_PRESET en server/.env',
+        });
+      }
+      const uploaded = await uploadToCloudinary(req.file);
+      publicUrl = uploaded.publicUrl;
+      publicId = uploaded.publicId;
+      mediaType = uploaded.mediaType;
+    }
+
+    const asset = {
+      id: randomUUID(),
+      name: req.body.name || req.file?.originalname || 'Asset',
+      ratio: req.body.ratio || '1:1',
+      copy: req.body.copy || '',
+      createdAt: new Date().toISOString(),
+      publicUrl,
+      publicId,
+      url: publicUrl,
+      thumbnail: publicUrl || undefined,
+      mediaType,
+    };
+    user.assets.push(asset);
+    addActivity(user, {
+      type: 'Asset',
+      title: `Nuevo asset: ${asset.name}`,
+      color: 'bg-cyan-500',
+    });
+    saveDb(db);
+    res.status(201).json(asset);
+  } catch (err) {
+    console.error('Asset upload error:', err.message);
+    res.status(500).json({ error: err.message || 'Error al subir asset' });
+  }
+});
+
+app.post('/api/v1/agency/ai/generate-copy/', async (req, res) => {
+  try {
+    const { topic, platform = 'Instagram', tone } = req.body;
+    if (!topic?.trim()) {
+      return res.status(400).json({ error: 'topic es requerido' });
+    }
+    if (!isHuggingFaceConfigured()) {
+      return res.status(503).json({ error: 'Configura HUGGINGFACE_API_TOKEN en server/.env' });
+    }
+    const copy = await generateSocialCopy({ topic, platform, tone });
+    res.json({ copy });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/agency/ai/generate-image/', async (req, res) => {
+  const db = loadDb();
+  const user = getUserData(db, getUserId(req));
+
+  try {
+    const { prompt, name, ratio = '1:1' } = req.body;
+    if (!prompt?.trim()) {
+      return res.status(400).json({ error: 'prompt es requerido' });
+    }
+    if (!isHuggingFaceConfigured()) {
+      return res.status(503).json({ error: 'Configura HUGGINGFACE_API_TOKEN en server/.env' });
+    }
+    if (!isCloudinaryConfigured()) {
+      return res.status(503).json({ error: 'Cloudinary requerido para guardar la imagen generada' });
+    }
+
+    const generated = await generateImage({ prompt, ratio });
+    const uploaded = await uploadToCloudinary(generated);
+
+    const asset = {
+      id: randomUUID(),
+      name: name || `IA: ${prompt.slice(0, 40)}`,
+      ratio,
+      copy: '',
+      createdAt: new Date().toISOString(),
+      publicUrl: uploaded.publicUrl,
+      publicId: uploaded.publicId,
+      url: uploaded.publicUrl,
+      thumbnail: uploaded.publicUrl,
+      mediaType: 'image',
+      source: 'huggingface',
+    };
+    user.assets.push(asset);
+    saveDb(db);
+    res.status(201).json({ asset, copy: null });
+  } catch (err) {
+    console.error('HF image error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.delete('/api/v1/agency/assets/:id/', (req, res) => {
@@ -654,7 +779,12 @@ app.post('/api/v1/agency/posts/process-scheduled/', async (req, res) => {
     const integration = user.integrations[integrationKey];
     const pub = await publishToPlatform(
       post.platform,
-      { copy: post.content, integration },
+      {
+        copy: post.content,
+        integration,
+        mediaUrl: post.mediaUrl || resolveAssetMediaUrl(user.assets.find((a) => a.id === post.assetId)),
+        mediaType: post.mediaType,
+      },
       META_GRAPH_API_VERSION,
     );
     Object.assign(post, {
@@ -702,7 +832,14 @@ app.get('/api/v1/agency/stats/', (req, res) => {
 });
 
 app.get('/api/v1/agency/health/', (_req, res) => {
-  res.json({ status: 'ok', service: 'agency-api', port: PORT });
+  res.json({
+    status: 'ok',
+    service: 'agency-api',
+    port: PORT,
+    cloudinary: isCloudinaryConfigured(),
+    huggingface: isHuggingFaceConfigured(),
+    demoOnly: [...DEMO_ONLY_PROVIDERS],
+  });
 });
 
 app.listen(PORT, () => {

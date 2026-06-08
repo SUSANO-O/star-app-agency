@@ -81,7 +81,7 @@ export async function deleteCampaignApi(id: string): Promise<void> {
 
 export async function publishCampaignApi(
   id: string,
-  body: { copy?: string; scheduledAt?: string; platforms?: string[] },
+  body: { copy?: string; scheduledAt?: string; platforms?: string[]; assetId?: string },
 ): Promise<{
   campaign: Campaign;
   posts: SocialPost[];
@@ -117,17 +117,42 @@ export async function fetchAssets(): Promise<Asset[]> {
 }
 
 export async function uploadAssetApi(
-  file: File | null,
+  file: File,
   name: string,
   ratio: string,
+  copy?: string,
 ): Promise<Asset> {
   const form = new FormData();
   form.append('name', name);
   form.append('ratio', ratio);
-  if (file) form.append('file', file);
+  if (copy) form.append('copy', copy);
+  form.append('file', file);
 
   const { data } = await agencyClient.post<Asset>('/assets/upload/', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  });
+  return data;
+}
+
+export async function generateCopyApi(body: {
+  topic: string;
+  platform?: string;
+  tone?: string;
+}): Promise<{ copy: string }> {
+  const { data } = await agencyClient.post<{ copy: string }>('/ai/generate-copy/', body, {
+    timeout: 120000,
+  });
+  return data;
+}
+
+export async function generateImageApi(body: {
+  prompt: string;
+  name?: string;
+  ratio?: string;
+}): Promise<{ asset: Asset }> {
+  const { data } = await agencyClient.post<{ asset: Asset }>('/ai/generate-image/', body, {
+    timeout: 180000,
   });
   return data;
 }

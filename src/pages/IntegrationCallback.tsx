@@ -3,23 +3,25 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { completeIntegrationCallback } from '../lib/agencyApi';
 import { PLATFORM_LABELS } from '../lib/agencyTypes';
 import type { IntegrationProvider } from '../lib/agencyTypes';
+import { resolveOAuthProvider } from '../lib/oauthState';
 
 export default function IntegrationCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
-  const [message, setMessage] = useState('Connecting integration...');
+  const [message, setMessage] = useState('Conectando...');
   const [detail, setDetail] = useState('');
 
   useEffect(() => {
-    const provider = searchParams.get('provider') as IntegrationProvider | null;
     const code = searchParams.get('code');
     const error = searchParams.get('error');
+    const state = searchParams.get('state');
+    const provider = resolveOAuthProvider(searchParams.get('provider'), state);
 
     if (error || !provider || !code) {
       setStatus('error');
-      setMessage('Connection error');
-      setDetail('Missing authorization code or provider. Redirecting...');
+      setMessage('No se pudo conectar');
+      setDetail('Redirigiendo...');
       setTimeout(() => navigate('/?tab=integrations', { replace: true }), 2000);
       return;
     }
@@ -30,33 +32,36 @@ export default function IntegrationCallback() {
       .then((res) => {
         if (!res.success) {
           setStatus('error');
-          setMessage(`Could not connect ${label}`);
-          setDetail(res.error || 'OAuth token exchange failed.');
+          setMessage(`No se pudo conectar ${label}`);
+          setDetail(res.error || 'Intenta de nuevo.');
           setTimeout(() => navigate('/?tab=integrations', { replace: true }), 2500);
           return;
         }
 
         setStatus('success');
-        if (res.mode === 'demo') {
-          setMessage(`${label} connected in demo mode`);
-          setDetail(
-            'Simulated connection — posts and calendar sync will not reach the real API.',
+        setMessage(`${label} conectado`);
+        setDetail(res.accountName ? `Cuenta: ${res.accountName}` : '');
+
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(
+            { type: 'agency-integration-connected', provider },
+            window.location.origin,
           );
-        } else {
-          setMessage(`${label} connected with real OAuth`);
-          setDetail(
-            res.accountName
-              ? `Authorized as ${res.accountName}. Live API tokens are stored on the server.`
-              : 'Authorization completed. Live API tokens are stored on the server.',
-          );
+          setTimeout(() => window.close(), 800);
+          return;
         }
+
         setTimeout(() => navigate('/?tab=integrations', { replace: true }), 2000);
       })
       .catch((err: unknown) => {
         const axiosErr = err as { response?: { data?: { error?: string } } };
         setStatus('error');
-        setMessage(`Could not connect ${label}`);
-        setDetail(axiosErr.response?.data?.error || 'OAuth callback failed on the server.');
+        setMessage(`No se pudo conectar ${label}`);
+        setDetail(axiosErr.response?.data?.error || 'Intenta de nuevo.');
+        if (window.opener && !window.opener.closed) {
+          setTimeout(() => window.close(), 2500);
+          return;
+        }
         setTimeout(() => navigate('/?tab=integrations', { replace: true }), 2500);
       });
   }, [searchParams, navigate]);

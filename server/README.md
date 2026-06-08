@@ -33,11 +33,13 @@ Solo 2 claves. El usuario autoriza **un permiso**: crear eventos en su calendari
 | `GOOGLE_CLIENT_SECRET` | Misma pantalla |
 | `GOOGLE_CALENDAR_ID` | Opcional, default `primary` |
 
-Redirect URI en Google Console:
+Redirect URI en Google Console (debe coincidir **exacto** con `GOOGLE_REDIRECT_URI`):
 
 ```
-http://localhost:8001/api/v1/agency/integrations/google/callback/
+http://localhost:5173/integrations/callback
 ```
+
+En **Google Cloud** → APIs y servicios → Credenciales → tu cliente OAuth → **URIs de redirección autorizados** → agregar la línea de arriba → Guardar.
 
 Scope mínimo: `https://www.googleapis.com/auth/calendar.events`
 
@@ -79,7 +81,7 @@ Actualiza redirect URIs a tu dominio real y en Vercel/Django:
 
 ```env
 FRONTEND_URL=https://tu-app.vercel.app
-GOOGLE_REDIRECT_URI=https://startapp360.com/api/v1/agency/integrations/google/callback/
+GOOGLE_REDIRECT_URI=https://tu-app.vercel.app/integrations/callback
 LINKEDIN_REDIRECT_URI=https://tu-app.vercel.app/integrations/callback
 ```
 
